@@ -1,5 +1,7 @@
 # crypto-lab-x3dh-wire
 
+[![GitHub Pages](https://img.shields.io/badge/demo-live-brightgreen)](https://systemslibrarian.github.io/crypto-lab-x3dh-wire/)
+
 `X25519 · HKDF-SHA-256 · Ed25519`
 
 Browser-based interactive demonstration of the Extended Triple Diffie-Hellman (X3DH) key agreement protocol used before the Double Ratchet in secure messengers.
