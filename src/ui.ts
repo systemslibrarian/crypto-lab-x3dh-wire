@@ -181,8 +181,8 @@ function renderAppShell(demo: DemoData, panelIndex: number): string {
       <header class="hero">
         <div class="hero-topline">
           <span class="category-chip" role="note">Key Agreement</span>
-          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light and dark theme">Toggle Theme</button>
         </div>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode">🌙</button>
         <h1>X3DH Wire</h1>
         <p class="subtitle">Interactive walkthrough of the Extended Triple Diffie-Hellman handshake that boots secure messaging sessions.</p>
       </header>
@@ -204,19 +204,32 @@ function renderAppShell(demo: DemoData, panelIndex: number): string {
       </div>
 
       ${renderStaticSections()}
-
-      <footer role="contentinfo">
-        <p>So whether you eat or drink or whatever you do, do it all for the glory of God. — 1 Corinthians 10:31</p>
-      </footer>
     </main>
   `;
 }
 
+function updateThemeToggleUi(theme: "dark" | "light") {
+  const button = document.querySelector<HTMLButtonElement>("#theme-toggle");
+  if (!button) {
+    return;
+  }
+
+  if (theme === "dark") {
+    button.textContent = "🌙";
+    button.setAttribute("aria-label", "Switch to light mode");
+    return;
+  }
+
+  button.textContent = "☀️";
+  button.setAttribute("aria-label", "Switch to dark mode");
+}
+
 function applyTheme() {
   const root = document.documentElement;
-  const stored = localStorage.getItem("x3dh-theme");
-  const mode = stored === "light" ? "light" : "dark";
+  const stored = localStorage.getItem("theme");
+  const mode: "dark" | "light" = stored === "light" ? "light" : "dark";
   root.dataset.theme = mode;
+  updateThemeToggleUi(mode);
 }
 
 function wireThemeToggle() {
@@ -225,11 +238,14 @@ function wireThemeToggle() {
     return;
   }
 
+  updateThemeToggleUi(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+
   button.addEventListener("click", () => {
     const root = document.documentElement;
-    const next = root.dataset.theme === "dark" ? "light" : "dark";
+    const next: "dark" | "light" = root.dataset.theme === "dark" ? "light" : "dark";
     root.dataset.theme = next;
-    localStorage.setItem("x3dh-theme", next);
+    localStorage.setItem("theme", next);
+    updateThemeToggleUi(next);
   });
 }
 

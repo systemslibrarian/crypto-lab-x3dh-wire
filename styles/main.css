@@ -105,6 +105,7 @@ body {
 
 /* ── Hero header ── */
 .hero {
+  position: relative;
   padding: 1.4rem;
   border: 1px solid var(--border);
   border-radius: 1rem;
@@ -148,11 +149,32 @@ body {
   transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
+.theme-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+}
+
 .theme-toggle:hover,
 .walkthrough-controls button:hover:not(:disabled),
 .step-btn:hover {
   transform: translateY(-1px);
   border-color: var(--accent);
+}
+
+.theme-toggle:hover {
+  background: var(--surface);
 }
 
 /* ── Headings ── */
