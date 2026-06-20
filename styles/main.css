@@ -22,8 +22,8 @@
   --surface-soft: #f6ead4;
   --text: #1f2430;
   --text-dim: #4a5362;
-  --accent: #0e9f6e;
-  --accent-2: #b16400;
+  --accent: #0a7a52; /* WCAG AA: 5.07:1 on light surface */
+  --accent-2: #9a5600; /* WCAG AA: 4.76:1 on light surface */
   --border: #d9cdb6;
   --shadow: 0 18px 40px rgba(70, 45, 0, 0.12);
   --focus-ring: 0 0 0 3px var(--accent);

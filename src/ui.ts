@@ -196,7 +196,7 @@ function renderAppShell(demo: DemoData, panelIndex: number): string {
           .join("")}
       </nav>
 
-      <section id="panel-host" aria-live="polite" aria-atomic="true" role="region" aria-label="Step ${panelIndex + 1} of ${panels.length}: ${PANEL_LABELS[panelIndex]}">${panels[panelIndex]}</section>
+      <section id="panel-host" tabindex="-1" aria-live="polite" aria-atomic="true" role="region" aria-label="Step ${panelIndex + 1} of ${panels.length}: ${PANEL_LABELS[panelIndex]}">${panels[panelIndex]}</section>
 
       <div class="walkthrough-controls" role="group" aria-label="Panel navigation">
         <button id="prev-panel" type="button" aria-label="Previous panel" ${panelIndex === 0 ? "disabled" : ""}>Previous</button>
@@ -249,38 +249,82 @@ function wireThemeToggle() {
   });
 }
 
-function wirePanelControls(demo: DemoData, initialIndex: number) {
-  const app = document.querySelector<HTMLDivElement>("#app");
-  if (!app) {
+function wirePanelControls(demo: DemoData) {
+  const panels = [
+    renderPanel1(demo),
+    renderPanel2(demo),
+    renderPanel3(demo),
+    renderPanel4(demo),
+    renderPanel5(demo)
+  ];
+  const lastIndex = panels.length - 1;
+
+  const host = document.querySelector<HTMLElement>("#panel-host");
+  const prev = document.querySelector<HTMLButtonElement>("#prev-panel");
+  const next = document.querySelector<HTMLButtonElement>("#next-panel");
+  const stepButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".step-btn"));
+  if (!host) {
     return;
   }
 
-  let panelIndex = initialIndex;
+  let panelIndex = 0;
 
-  const rerender = () => {
-    app.innerHTML = renderAppShell(demo, panelIndex);
-    wireThemeToggle();
-    wirePanelControls(demo, panelIndex);
+  // Patch only the parts of the DOM that change, so keyboard focus, the hero
+  // animation, and event listeners all survive a panel switch.
+  const showPanel = (index: number, moveFocus: boolean) => {
+    panelIndex = Math.min(lastIndex, Math.max(0, index));
+
+    host.innerHTML = panels[panelIndex];
+    host.setAttribute(
+      "aria-label",
+      `Step ${panelIndex + 1} of ${panels.length}: ${PANEL_LABELS[panelIndex]}`
+    );
+
+    stepButtons.forEach((btn, idx) => {
+      const current = idx === panelIndex;
+      btn.classList.toggle("active", current);
+      btn.setAttribute("aria-current", current ? "step" : "false");
+    });
+
+    if (prev) {
+      prev.disabled = panelIndex === 0;
+    }
+    if (next) {
+      next.disabled = panelIndex === lastIndex;
+    }
+
+    // Send screen-reader and keyboard focus to the freshly rendered panel.
+    if (moveFocus) {
+      host.focus();
+    }
   };
 
-  const prev = document.querySelector<HTMLButtonElement>("#prev-panel");
-  const next = document.querySelector<HTMLButtonElement>("#next-panel");
+  prev?.addEventListener("click", () => showPanel(panelIndex - 1, true));
+  next?.addEventListener("click", () => showPanel(panelIndex + 1, true));
 
-  prev?.addEventListener("click", () => {
-    panelIndex = Math.max(0, panelIndex - 1);
-    rerender();
+  stepButtons.forEach((btn) => {
+    btn.addEventListener("click", () => showPanel(Number(btn.dataset.step ?? "0"), true));
   });
 
-  next?.addEventListener("click", () => {
-    panelIndex = Math.min(4, panelIndex + 1);
-    rerender();
-  });
+  // Left/Right arrow keys move between steps when the stepper has focus.
+  const stepper = document.querySelector<HTMLElement>(".stepper");
+  stepper?.addEventListener("keydown", (event) => {
+    let target = panelIndex;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      target = Math.min(lastIndex, panelIndex + 1);
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      target = Math.max(0, panelIndex - 1);
+    } else if (event.key === "Home") {
+      target = 0;
+    } else if (event.key === "End") {
+      target = lastIndex;
+    } else {
+      return;
+    }
 
-  document.querySelectorAll<HTMLButtonElement>(".step-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      panelIndex = Number(btn.dataset.step || "0");
-      rerender();
-    });
+    event.preventDefault();
+    showPanel(target, false);
+    stepButtons[target]?.focus();
   });
 }
 
@@ -294,5 +338,5 @@ export async function renderDemo() {
   applyTheme();
   app.innerHTML = renderAppShell(demo, 0);
   wireThemeToggle();
-  wirePanelControls(demo, 0);
+  wirePanelControls(demo);
 }

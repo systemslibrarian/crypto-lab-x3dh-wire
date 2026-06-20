@@ -12,12 +12,28 @@
     <meta name="description" content="Interactive browser demo of the X3DH key agreement protocol used by Signal, WhatsApp, and other secure messengers." />
     <meta name="color-scheme" content="dark light" />
     <title>X3DH Wire — Extended Triple Diffie-Hellman Demo</title>
+
+    <!-- Social / Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="X3DH Wire — Extended Triple Diffie-Hellman Demo" />
+    <meta property="og:description" content="Interactive browser demo of the X3DH key agreement protocol used by Signal, WhatsApp, and other secure messengers." />
+    <meta property="og:url" content="https://systemslibrarian.github.io/crypto-lab-x3dh-wire/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="X3DH Wire — Extended Triple Diffie-Hellman Demo" />
+    <meta name="twitter:description" content="Interactive browser demo of the X3DH key agreement protocol used by Signal, WhatsApp, and other secure messengers." />
+
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔑</text></svg>" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
-    <div id="app" role="application" aria-label="X3DH Wire Demo">
+    <div id="app">
       <p class="loading-msg" aria-live="polite">Loading X3DH demo…</p>
+      <noscript>
+        <p class="loading-msg">
+          This interactive demo runs the X3DH handshake live in your browser and
+          needs JavaScript enabled. Please enable JavaScript to view it.
+        </p>
+      </noscript>
     </div>
     <footer style="text-align:center; padding: 1.5rem; font-size: 0.85rem; opacity: 0.7; margin-top: 2rem;">
       Whether you eat or drink or whatever you do, do it all for the glory of God. — 1 Corinthians 10:31

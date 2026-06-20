@@ -1,0 +1,120 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildDemoState,
+  bytesToHex,
+  computeAliceDhSet,
+  computeBobDhSet,
+  createAliceState,
+  createBobState,
+  decryptInitialMessage,
+  deriveX3dhSharedSecret,
+  encryptInitialMessage,
+  equalBytes,
+  verifySpkSignature
+} from "./x3dh";
+
+describe("bytesToHex", () => {
+  it("lower-cases and zero-pads each byte", () => {
+    expect(bytesToHex(new Uint8Array([0, 15, 255, 16]))).toBe("000fff10");
+  });
+
+  it("returns an empty string for empty input", () => {
+    expect(bytesToHex(new Uint8Array(0))).toBe("");
+  });
+});
+
+describe("equalBytes (constant-time compare)", () => {
+  it("is true for identical content", () => {
+    expect(equalBytes(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 3]))).toBe(true);
+  });
+
+  it("is false when any byte differs", () => {
+    expect(equalBytes(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 4]))).toBe(false);
+  });
+
+  it("is false for differing lengths", () => {
+    expect(equalBytes(new Uint8Array([1, 2]), new Uint8Array([1, 2, 3]))).toBe(false);
+  });
+});
+
+describe("SPK signature authentication", () => {
+  it("verifies a well-formed signed prekey", () => {
+    const bob = createBobState();
+    expect(verifySpkSignature(bob.bundle)).toBe(true);
+  });
+
+  it("rejects a tampered signed prekey", () => {
+    const bob = createBobState();
+    bob.bundle.spkBPub[0] ^= 0xff;
+    expect(verifySpkSignature(bob.bundle)).toBe(false);
+  });
+
+  it("rejects a tampered signature", () => {
+    const bob = createBobState();
+    bob.bundle.spkSignature[0] ^= 0xff;
+    expect(verifySpkSignature(bob.bundle)).toBe(false);
+  });
+});
+
+describe("X3DH agreement symmetry", () => {
+  it("Alice and Bob derive the same DH set and shared secret", async () => {
+    const bob = createBobState();
+    const alice = createAliceState();
+
+    const aliceDh = computeAliceDhSet(alice, bob.bundle);
+    const bobDh = computeBobDhSet(bob, alice.ikA.publicKey, alice.ekA.publicKey);
+
+    // Each Diffie-Hellman pair must match across the two participants.
+    expect(equalBytes(aliceDh.dh1, bobDh.dh1)).toBe(true);
+    expect(equalBytes(aliceDh.dh2, bobDh.dh2)).toBe(true);
+    expect(equalBytes(aliceDh.dh3, bobDh.dh3)).toBe(true);
+    expect(equalBytes(aliceDh.dh4, bobDh.dh4)).toBe(true);
+
+    const aliceSk = await deriveX3dhSharedSecret(aliceDh);
+    const bobSk = await deriveX3dhSharedSecret(bobDh);
+    expect(equalBytes(aliceSk, bobSk)).toBe(true);
+    expect(aliceSk.length).toBe(32);
+  });
+
+  it("produces different secrets for independent sessions", async () => {
+    const a = await deriveX3dhSharedSecret(computeAliceDhSet(createAliceState(), createBobState().bundle));
+    const b = await deriveX3dhSharedSecret(computeAliceDhSet(createAliceState(), createBobState().bundle));
+    expect(equalBytes(a, b)).toBe(false);
+  });
+});
+
+describe("AES-GCM initial message", () => {
+  it("round-trips plaintext under the derived shared secret", async () => {
+    const bob = createBobState();
+    const alice = createAliceState();
+    const sk = await deriveX3dhSharedSecret(computeAliceDhSet(alice, bob.bundle));
+
+    const message = "Hi Bob — first contact over X3DH.";
+    const { iv, ciphertext } = await encryptInitialMessage(sk, message);
+    const recovered = await decryptInitialMessage(sk, iv, ciphertext);
+    expect(recovered).toBe(message);
+  });
+
+  it("fails authentication under a wrong key", async () => {
+    const sk = await deriveX3dhSharedSecret(computeAliceDhSet(createAliceState(), createBobState().bundle));
+    const wrong = await deriveX3dhSharedSecret(computeAliceDhSet(createAliceState(), createBobState().bundle));
+    const { iv, ciphertext } = await encryptInitialMessage(sk, "secret");
+    await expect(decryptInitialMessage(wrong, iv, ciphertext)).rejects.toThrow();
+  });
+
+  it("fails authentication when ciphertext is tampered", async () => {
+    const sk = await deriveX3dhSharedSecret(computeAliceDhSet(createAliceState(), createBobState().bundle));
+    const { iv, ciphertext } = await encryptInitialMessage(sk, "secret");
+    ciphertext[0] ^= 0xff;
+    await expect(decryptInitialMessage(sk, iv, ciphertext)).rejects.toThrow();
+  });
+});
+
+describe("buildDemoState (full end-to-end flow)", () => {
+  it("yields matching secrets and a correct decryption", async () => {
+    const demo = await buildDemoState();
+    expect(demo.signatureOk).toBe(true);
+    expect(demo.matchingSecrets).toBe(true);
+    expect(demo.decryptedByBob).toBe(demo.firstPlaintext);
+  });
+});
