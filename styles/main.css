@@ -419,3 +419,7 @@ footer {
     font-size: 0.88rem;
   }
 }
+
+
+/* ═══ Accessibility: WCAG AA contrast overrides (auto-added) ═══ */
+[data-theme="light"] .skip-link { background-color: #208662; } /* was #0a7a52 on #000000 = 3.92:1 → 4.65:1 */
