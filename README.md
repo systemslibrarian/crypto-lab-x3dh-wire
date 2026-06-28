@@ -4,35 +4,56 @@
 [![CI](https://github.com/systemslibrarian/crypto-lab-x3dh-wire/actions/workflows/ci.yml/badge.svg)](https://github.com/systemslibrarian/crypto-lab-x3dh-wire/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-## 1. What It Is
+## What It Is
 
 This project is a browser demo of the Extended Triple Diffie-Hellman (X3DH) handshake used to establish an initial shared secret for secure messaging. It uses X25519 for Diffie-Hellman operations, HKDF-SHA-256 for key derivation, and Ed25519 for signed prekey authentication in the demo flow. The protocol solves asynchronous first-contact key agreement so Alice can start a secure session while Bob is offline. In security-model terms, this is an asymmetric key agreement design that provides authentication and forward-secrecy properties for initial messages when one-time prekeys are used.
 
-## 2. When to Use It
+## When to Use It
 
 - Use it for asynchronous secure messaging bootstrapping: X3DH is designed so the initiator can derive a shared secret from published prekeys even when the recipient is offline.
 - Use it when you need authenticated initial key agreement: signed prekeys bind the setup to recipient identity material before ratcheting starts.
 - Use it when your system will transition into a ratchet protocol: X3DH cleanly produces the initial secret that feeds a Double Ratchet-style root key.
-- Do not use it as a standalone long-term session protocol: X3DH establishes the starting secret, but ongoing message security needs a post-handshake ratchet and replay-handling design.
+- Use it to establish a starting secret only, not as a standalone long-term session protocol: ongoing message security needs a post-handshake ratchet and replay-handling design.
+- Do NOT use it to secure real communications: it is an educational demo — use a vetted library such as [libsignal](https://github.com/signalfoundation/libsignal).
 
-## 3. Live Demo
+## Live Demo
 
-Live demo: https://systemslibrarian.github.io/crypto-lab-x3dh-wire/
+**[systemslibrarian.github.io/crypto-lab-x3dh-wire](https://systemslibrarian.github.io/crypto-lab-x3dh-wire/)**
 
 The demo walks through Bob prekey bundle publication, Alice initiation, four DH computations, and final shared-secret derivation. You can navigate each protocol stage with the panel step buttons and Previous/Next controls while inspecting concrete key and ciphertext values rendered in each panel. The interface includes a dark/light theme toggle and does not expose user-tunable crypto parameters such as key size or iteration count.
 
-## 4. How to Run Locally
+## What Can Go Wrong
+
+- Without one-time prekeys, the handshake loses some of its forward-secrecy strength against an attacker who later compromises the recipient's keys.
+- X3DH alone provides no protection for ongoing messages or replay handling; it must hand off to a post-handshake ratchet (e.g. Double Ratchet) for continued security.
+- A compromised or unrotated signed prekey weakens authentication of the session setup; prekeys must be rotated and exhausted one-time prekeys replenished.
+- Compromise of an identity key undermines authentication of future handshakes, so identity-key protection is critical.
+- The demo runs both sides in one browser tab with no networking or persistence and substitutes plain Ed25519 for XEdDSA, so it illustrates the protocol shape rather than a deployable transport.
+
+## Real-World Usage
+
+- The Signal Protocol uses X3DH to bootstrap sessions before the Double Ratchet takes over.
+- WhatsApp's end-to-end encryption is built on the Signal Protocol, including its X3DH-style handshake.
+- Google Messages RCS end-to-end encryption uses the Signal Protocol for key agreement.
+- Other messaging systems adopting the Signal Protocol (such as Session and Signal-based forks) rely on the same asynchronous-handshake design.
+
+## How to Run Locally
 
 ```bash
-git clone https://github.com/systemslibrarian/crypto-lab-x3dh-wire.git
+git clone https://github.com/systemslibrarian/crypto-lab-x3dh-wire
 cd crypto-lab-x3dh-wire
 npm install
 npm run dev
 ```
 
-No environment variables are required for local development.
+## Related Demos
+- [crypto-lab-ratchet-wire](https://systemslibrarian.github.io/crypto-lab-ratchet-wire/) — the Double Ratchet that takes over after X3DH establishes the initial secret.
+- [crypto-lab-key-exchange](https://systemslibrarian.github.io/crypto-lab-key-exchange/) — the Diffie-Hellman / ECDH / X25519 foundations X3DH is built from.
+- [crypto-lab-noise-pipe](https://systemslibrarian.github.io/crypto-lab-noise-pipe/) — the Noise framework's handshake patterns, an alternative key-agreement design.
+- [crypto-lab-mls-group](https://systemslibrarian.github.io/crypto-lab-mls-group/) — group key agreement (MLS/TreeKEM) for the many-party case.
+- [crypto-lab-hybrid-wire](https://systemslibrarian.github.io/crypto-lab-hybrid-wire/) — X25519 + ML-KEM-768 hybrid key exchange for post-quantum migration.
 
-## 5. Tests and Verification
+## Tests and Verification
 
 ```bash
 npm run typecheck   # strict TypeScript, no emit
@@ -48,16 +69,16 @@ The cryptography is checked against known-answer test vectors and protocol invar
 
 Every push and pull request runs typecheck plus the full suite via GitHub Actions (`.github/workflows/ci.yml`), and a deploy only ships after those pass.
 
-## 6. Security Note
+## Security Note
 
 This is an **educational demonstration**, not a production cryptography library. It runs both sides of the handshake in a single browser tab to make every intermediate value visible, performs no networking or persistence, and signs the signed prekey with plain Ed25519 as an in-spec stand-in for the XEdDSA construction used in real X3DH deployments. Do not use it to secure real communications — use a vetted library such as [libsignal](https://github.com/signalfoundation/libsignal).
 
-## 7. Part of the Crypto-Lab Suite
-
-This demo is one module in the broader Crypto-Lab collection at https://systemslibrarian.github.io/crypto-lab/.
-
-## 8. License
+## License
 
 Released under the [MIT License](./LICENSE).
 
-So whether you eat or drink or whatever you do, do it all for the glory of God. — 1 Corinthians 10:31
+---
+
+*One of 60+ browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
+
+*"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
