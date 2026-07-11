@@ -10,12 +10,15 @@
     "test:watch": "vitest",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "test:a11y": "playwright test",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
     "@noble/curves": "^1.6.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1",
     "gh-pages": "^6.3.0",
     "typescript": "^5.7.3",
     "vite": "^6.0.7",
