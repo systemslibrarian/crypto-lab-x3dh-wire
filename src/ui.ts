@@ -468,13 +468,16 @@ function renderAppShell(data: DemoData, state: LabState): string {
   const panelIndex = state.panelIndex;
   return `
     <main id="main-content" class="app-shell" aria-label="X3DH Protocol Demo">
-      <header class="hero">
-        <div class="hero-topline">
-          <span class="category-chip" role="note">Key Agreement</span>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode" hidden>🌙</button>
+      <header class="cl-hero">
+        <div class="cl-hero-main">
+          <h1 class="cl-hero-title">X3DH</h1>
+          <p class="cl-hero-sub">Extended Triple Diffie-Hellman</p>
         </div>
-        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode">🌙</button>
-        <h1>X3DH Wire</h1>
-        <p class="subtitle">An interactive lab for the Extended Triple Diffie-Hellman handshake that boots Signal-style secure sessions. Break it, drop a key, tamper a signature — and watch which guarantee each of the four DHs actually provides.</p>
+        <aside class="cl-hero-why" aria-label="Why it matters">
+          <span class="cl-hero-why-label">WHY IT MATTERS</span>
+          <p class="cl-hero-why-text">X3DH lets Signal-style apps start an encrypted chat with someone who is offline. The sender mixes four Diffie-Hellman exchanges from the recipient's published prekeys, so both sides reach the same shared secret without being online at once.</p>
+        </aside>
       </header>
 
       ${renderStatus(data)}
