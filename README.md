@@ -6,7 +6,7 @@
 
 ## What It Is
 
-This project is a browser demo of the Extended Triple Diffie-Hellman (X3DH) handshake used to establish an initial shared secret for secure messaging. It uses X25519 for Diffie-Hellman operations, HKDF-SHA-256 for key derivation, and Ed25519 for signed prekey authentication in the demo flow. The protocol solves asynchronous first-contact key agreement so Alice can start a secure session while Bob is offline. In security-model terms, this is an asymmetric key agreement design that provides authentication and forward-secrecy properties for initial messages when one-time prekeys are used.
+This project is an interactive browser lab for the Extended Triple Diffie-Hellman (X3DH) handshake used to establish an initial shared secret for secure messaging. It uses X25519 for Diffie-Hellman operations, HKDF-SHA-256 for key derivation, and Ed25519 for signed prekey authentication in the demo flow. The protocol solves asynchronous first-contact key agreement so Alice can start a secure session while Bob is offline. In security-model terms, this is an asymmetric key agreement design that provides authentication and forward-secrecy properties for initial messages when one-time prekeys are used. Rather than paging through a fixed transcript, you can regenerate the keys, tamper the signed-prekey signature, drop the one-time prekey, or corrupt a byte of Alice's ephemeral key on the wire — and watch the real, in-browser handshake react, so each of the four DH operations turns from a claim into a demonstrated fact.
 
 ## When to Use It
 
@@ -20,7 +20,7 @@ This project is a browser demo of the Extended Triple Diffie-Hellman (X3DH) hand
 
 **[systemslibrarian.github.io/crypto-lab-x3dh-wire](https://systemslibrarian.github.io/crypto-lab-x3dh-wire/)**
 
-The demo walks through Bob prekey bundle publication, Alice initiation, four DH computations, and final shared-secret derivation. You can navigate each protocol stage with the panel step buttons and Previous/Next controls while inspecting concrete key and ciphertext values rendered in each panel. The interface includes a dark/light theme toggle and does not expose user-tunable crypto parameters such as key size or iteration count.
+The lab walks through Bob prekey bundle publication, Alice initiation, four DH computations, and final shared-secret derivation. A "who holds what" diagram places Alice's private keys, Bob's private keys, and the public server bundle spatially, and a viewpoint toggle on the DH panel draws the four Diffie-Hellman lines crossing one way for Alice and mirrored the other way for Bob — making visible why two parties using different key material arrive at the same secret. A three-beat timeline shows Bob offline at first contact. Four interactive experiments (regenerate keys, tamper the SPK signature, drop the one-time prekey, corrupt Alice's EK_A byte) re-run the real handshake and surface every downstream effect: signature verification flips, DH4 disappears, the two shared secrets converge or split with a byte-level diff, and Bob's decryption succeeds or authentically fails. First-use tooltips gloss prekey, signed prekey, ephemeral key, OPK, forward secrecy, XEdDSA, the 0xFF domain separator, and the HKDF info string. Full 64-char hex collapses to a head/tail chip you can click to expand, color-coded by owner (Alice / Bob / public). The interface includes a dark/light theme toggle and does not expose user-tunable crypto parameters such as key size or iteration count.
 
 ## What Can Go Wrong
 

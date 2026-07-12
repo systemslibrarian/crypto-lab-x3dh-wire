@@ -45,7 +45,7 @@ export type DhSet = {
   dh1: Uint8Array;
   dh2: Uint8Array;
   dh3: Uint8Array;
-  dh4: Uint8Array;
+  dh4: Uint8Array | null;
 };
 
 export type InitialMessage = {
@@ -72,7 +72,11 @@ export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
+export function equalBytes(a: Uint8Array | null, b: Uint8Array | null): boolean {
+  if (a === null || b === null) {
+    return a === b;
+  }
+
   if (a.length !== b.length) {
     return false;
   }
@@ -124,26 +128,38 @@ function dh(priv: Uint8Array, pub: Uint8Array): Uint8Array {
   return x25519.getSharedSecret(priv, pub);
 }
 
-export function computeAliceDhSet(alice: AliceState, bundle: BobBundle): DhSet {
+export function computeAliceDhSet(alice: AliceState, bundle: BobBundle, withOpk = true): DhSet {
   return {
     dh1: dh(alice.ikA.privateKey, bundle.spkBPub),
     dh2: dh(alice.ekA.privateKey, bundle.ikBPub),
     dh3: dh(alice.ekA.privateKey, bundle.spkBPub),
-    dh4: dh(alice.ekA.privateKey, bundle.opkBPub)
+    dh4: withOpk ? dh(alice.ekA.privateKey, bundle.opkBPub) : null
   };
 }
 
-export function computeBobDhSet(bob: BobState, ikAPub: Uint8Array, ekAPub: Uint8Array): DhSet {
+export function computeBobDhSet(
+  bob: BobState,
+  ikAPub: Uint8Array,
+  ekAPub: Uint8Array,
+  withOpk = true
+): DhSet {
   return {
     dh1: dh(bob.spkB.privateKey, ikAPub),
     dh2: dh(bob.ikB.privateKey, ekAPub),
     dh3: dh(bob.spkB.privateKey, ekAPub),
-    dh4: dh(bob.opkB.privateKey, ekAPub)
+    dh4: withOpk ? dh(bob.opkB.privateKey, ekAPub) : null
   };
 }
 
 export async function deriveX3dhSharedSecret(dhSet: DhSet): Promise<Uint8Array> {
-  const km = concatDhWithDomainSeparator([dhSet.dh1, dhSet.dh2, dhSet.dh3, dhSet.dh4]);
+  // Per the X3DH spec, DH4 (the one-time prekey term) is simply omitted from
+  // the concatenation when no OPK is available — the secret still forms from
+  // DH1..DH3, it just loses the extra one-time forward-secrecy contribution.
+  const dhParts = [dhSet.dh1, dhSet.dh2, dhSet.dh3];
+  if (dhSet.dh4) {
+    dhParts.push(dhSet.dh4);
+  }
+  const km = concatDhWithDomainSeparator(dhParts);
   const salt = new Uint8Array(32);
   const info = encoder.encode(X3DH_INFO_STRING);
   return hkdfSha256(km, salt, info, 32);
@@ -182,38 +198,90 @@ export async function decryptInitialMessage(
   return new TextDecoder().decode(new Uint8Array(decrypted));
 }
 
-export async function buildDemoState() {
-  const bob = createBobState();
-  const alice = createAliceState();
+/**
+ * The four experiments a learner can toggle. Each one performs REAL crypto:
+ * `tamperSpkSignature` flips a byte and the Ed25519 verify genuinely fails;
+ * `dropOpk` genuinely omits DH4 from both derivations; `corruptEkA` genuinely
+ * corrupts the public EK_A Alice sends so Bob's reconstructed key no longer
+ * matches. Nothing here fakes an outcome — the visualization reads the truth.
+ */
+export type Scenario = {
+  tamperSpkSignature: boolean;
+  dropOpk: boolean;
+  corruptEkA: boolean;
+};
 
-  const signatureOk = verifySpkSignature(bob.bundle);
-  const aliceDh = computeAliceDhSet(alice, bob.bundle);
-  const bobDh = computeBobDhSet(bob, alice.ikA.publicKey, alice.ekA.publicKey);
+export const DEFAULT_SCENARIO: Scenario = {
+  tamperSpkSignature: false,
+  dropOpk: false,
+  corruptEkA: false
+};
+
+export async function buildDemoState(
+  scenario: Scenario = DEFAULT_SCENARIO,
+  seed?: { bob: BobState; alice: AliceState }
+) {
+  const bob = seed?.bob ?? createBobState();
+  const alice = seed?.alice ?? createAliceState();
+
+  // (b) Tamper the SPK signature: flip a byte on a COPY of the bundle so the
+  // Ed25519 verification honestly fails, without corrupting the raw keypair.
+  const bundle: BobBundle = { ...bob.bundle, spkSignature: Uint8Array.from(bob.bundle.spkSignature) };
+  if (scenario.tamperSpkSignature) {
+    bundle.spkSignature[0] ^= 0xff;
+  }
+  const signatureOk = verifySpkSignature(bundle);
+
+  const withOpk = !scenario.dropOpk;
+
+  // (d) Corrupt one byte of the EK_A public that travels to Bob. Alice still
+  // computes her DH set with her REAL private/public pair, but the header Bob
+  // receives is corrupted, so Bob's DH2/DH3/DH4 diverge and SK no longer matches.
+  const ekAPubOnWire = Uint8Array.from(alice.ekA.publicKey);
+  if (scenario.corruptEkA) {
+    ekAPubOnWire[0] ^= 0xff;
+  }
+
+  const aliceDh = computeAliceDhSet(alice, bundle, withOpk);
+  const bobDh = computeBobDhSet(bob, alice.ikA.publicKey, ekAPubOnWire, withOpk);
 
   const aliceSk = await deriveX3dhSharedSecret(aliceDh);
   const bobSk = await deriveX3dhSharedSecret(bobDh);
+  const matchingSecrets = equalBytes(aliceSk, bobSk);
 
   const firstPlaintext = "Hi Bob, this first message is established with X3DH-derived SK.";
   const encrypted = await encryptInitialMessage(aliceSk, firstPlaintext);
-  const decryptedByBob = await decryptInitialMessage(bobSk, encrypted.iv, encrypted.ciphertext);
+
+  // Bob decrypts with HIS reconstructed key. If EK_A was corrupted the keys
+  // differ and AES-GCM authentication genuinely throws — we surface that, we
+  // do not fake a "match".
+  let decryptedByBob: string | null = null;
+  try {
+    decryptedByBob = await decryptInitialMessage(bobSk, encrypted.iv, encrypted.ciphertext);
+  } catch {
+    decryptedByBob = null;
+  }
 
   const initialMessage: InitialMessage = {
     ikAPub: alice.ikA.publicKey,
-    ekAPub: alice.ekA.publicKey,
-    opkId: bob.bundle.opkId,
+    ekAPub: ekAPubOnWire,
+    opkId: bundle.opkId,
     iv: encrypted.iv,
     ciphertext: encrypted.ciphertext
   };
 
   return {
+    scenario,
     bob,
     alice,
+    bundle,
+    withOpk,
     signatureOk,
     aliceDh,
     bobDh,
     aliceSk,
     bobSk,
-    matchingSecrets: equalBytes(aliceSk, bobSk),
+    matchingSecrets,
     initialMessage,
     firstPlaintext,
     decryptedByBob

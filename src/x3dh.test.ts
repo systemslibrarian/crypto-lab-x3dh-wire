@@ -110,11 +110,59 @@ describe("AES-GCM initial message", () => {
   });
 });
 
+describe("dropping the one-time prekey (DH4)", () => {
+  it("omits DH4 yet Alice and Bob still derive an identical secret", async () => {
+    const bob = createBobState();
+    const alice = createAliceState();
+
+    const aliceDh = computeAliceDhSet(alice, bob.bundle, false);
+    const bobDh = computeBobDhSet(bob, alice.ikA.publicKey, alice.ekA.publicKey, false);
+
+    expect(aliceDh.dh4).toBeNull();
+    expect(bobDh.dh4).toBeNull();
+
+    const aliceSk = await deriveX3dhSharedSecret(aliceDh);
+    const bobSk = await deriveX3dhSharedSecret(bobDh);
+    expect(equalBytes(aliceSk, bobSk)).toBe(true);
+  });
+
+  it("derives a DIFFERENT secret than the OPK-included run (DH4 changed the input)", async () => {
+    const bob = createBobState();
+    const alice = createAliceState();
+
+    const withOpk = await deriveX3dhSharedSecret(computeAliceDhSet(alice, bob.bundle, true));
+    const noOpk = await deriveX3dhSharedSecret(computeAliceDhSet(alice, bob.bundle, false));
+    expect(equalBytes(withOpk, noOpk)).toBe(false);
+  });
+});
+
 describe("buildDemoState (full end-to-end flow)", () => {
   it("yields matching secrets and a correct decryption", async () => {
     const demo = await buildDemoState();
     expect(demo.signatureOk).toBe(true);
     expect(demo.matchingSecrets).toBe(true);
     expect(demo.decryptedByBob).toBe(demo.firstPlaintext);
+  });
+
+  it("scenario: tampering the SPK signature flips verification to invalid but the secret still forms", async () => {
+    const demo = await buildDemoState({ tamperSpkSignature: true, dropOpk: false, corruptEkA: false });
+    expect(demo.signatureOk).toBe(false);
+    // The DH agreement does not depend on the signature, so SK still matches.
+    expect(demo.matchingSecrets).toBe(true);
+  });
+
+  it("scenario: dropping the OPK still yields matching secrets (weaker forward secrecy, not broken)", async () => {
+    const demo = await buildDemoState({ tamperSpkSignature: false, dropOpk: true, corruptEkA: false });
+    expect(demo.withOpk).toBe(false);
+    expect(demo.aliceDh.dh4).toBeNull();
+    expect(demo.matchingSecrets).toBe(true);
+    expect(demo.decryptedByBob).toBe(demo.firstPlaintext);
+  });
+
+  it("scenario: corrupting one byte of EK_A on the wire breaks the shared secret and decryption", async () => {
+    const demo = await buildDemoState({ tamperSpkSignature: false, dropOpk: false, corruptEkA: true });
+    expect(demo.matchingSecrets).toBe(false);
+    // AES-GCM authentication genuinely fails under the mismatched key.
+    expect(demo.decryptedByBob).toBeNull();
   });
 });
