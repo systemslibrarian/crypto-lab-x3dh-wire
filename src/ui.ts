@@ -472,11 +472,12 @@ function renderAppShell(data: DemoData, state: LabState): string {
       <header class="cl-hero">
         <div class="cl-hero-main">
           <h1 class="cl-hero-title">X3DH</h1>
-          <p class="cl-hero-sub">Extended Triple Diffie-Hellman</p>
+          <p class="cl-hero-sub">Extended Triple Diffie-Hellman · X25519 + HKDF</p>
+          <p class="cl-hero-desc">Derives a shared secret from Bob's offline prekey bundle by combining four X25519 DH operations through HKDF, so you can watch Alice open an encrypted session before Bob ever comes online.</p>
         </div>
         <aside class="cl-hero-why" aria-label="Why it matters">
           <span class="cl-hero-why-label">WHY IT MATTERS</span>
-          <p class="cl-hero-why-text">X3DH lets Signal-style apps start an encrypted chat with someone who is offline. The sender mixes four Diffie-Hellman exchanges from the recipient's published prekeys, so both sides reach the same shared secret without being online at once.</p>
+          <p class="cl-hero-why-text">Secure messengers must let people start a conversation without both parties being online at once. X3DH is the handshake Signal and WhatsApp use to make that first message private, and its forward secrecy limits the damage if a key is later stolen.</p>
         </aside>
       </header>
 
