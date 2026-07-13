@@ -37,6 +37,15 @@ async function mountAndExpand(page: Page): Promise<void> {
     await page.waitForSelector('#panel-host .panel-card', { state: 'attached' });
   }
   if (count > 0) {
+    // Reach the final panel so the break-it experiments unlock, then reveal them
+    // so the status strip + tamper controls are also scanned for contrast.
+    await stepButtons.nth(count - 1).click();
+    await page.waitForSelector('#panel-host .panel-card', { state: 'attached' });
+    const unlock = page.locator('#unlock-experiments');
+    if ((await unlock.count()) > 0 && (await unlock.isEnabled())) {
+      await unlock.click();
+      await page.waitForSelector('#experiments', { state: 'attached' });
+    }
     await stepButtons.nth(0).click();
     await page.waitForSelector('#panel-host .panel-card', { state: 'attached' });
   }
