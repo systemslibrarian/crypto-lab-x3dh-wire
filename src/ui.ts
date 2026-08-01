@@ -47,7 +47,7 @@ const GLOSSARY: Record<string, string> = {
   xeddsa:
     "A scheme that lets one X25519 key be used to make Ed25519-style signatures. Real X3DH uses it; this demo signs with plain Ed25519 as an in-spec stand-in.",
   "domain separator":
-    "The 32 bytes of 0xFF prepended before the DH outputs. It guarantees the HKDF input can never collide with a raw curve encoding, keeping X25519 and X448 deployments from ever hashing the same bytes.",
+    "The 32 bytes of 0xFF prepended before the DH outputs (57 bytes for X448). The X3DH spec gives its purpose plainly: cryptographic domain separation with XEdDSA, so this KDF input can never be confused with material XEdDSA signs.",
   "info string":
     "The ASCII label 'WhisperText' fed into HKDF. It binds this derived key to the X3DH application so the same DH bytes used elsewhere would produce a different key."
 };
