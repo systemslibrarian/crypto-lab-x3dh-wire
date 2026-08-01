@@ -7,6 +7,7 @@ import {
   createAliceState,
   createBobState,
   decryptInitialMessage,
+  DEFAULT_SCENARIO,
   deriveX3dhSharedSecret,
   encryptInitialMessage,
   equalBytes,
@@ -45,6 +46,7 @@ describe("SPK signature authentication", () => {
 
   it("rejects a tampered signed prekey", () => {
     const bob = createBobState();
+    bob.bundle.spkBPub = Uint8Array.from(bob.bundle.spkBPub);
     bob.bundle.spkBPub[0] ^= 0xff;
     expect(verifySpkSignature(bob.bundle)).toBe(false);
   });
@@ -53,6 +55,38 @@ describe("SPK signature authentication", () => {
     const bob = createBobState();
     bob.bundle.spkSignature[0] ^= 0xff;
     expect(verifySpkSignature(bob.bundle)).toBe(false);
+  });
+
+  // The property the old build lacked: the signature is verified against the
+  // bundle's OWN identity key, so there is no separately-published signing key
+  // an attacker can swap alongside a prekey of their choosing.
+  it("the bundle publishes no standalone signing key", () => {
+    const bundle = createBobState().bundle;
+    expect(Object.keys(bundle).sort()).toEqual(
+      ["ikBPub", "opkBPub", "opkId", "spkBPub", "spkSignature"].sort()
+    );
+  });
+
+  it("rejects a prekey signed by a DIFFERENT identity key", () => {
+    const bob = createBobState();
+    const attacker = createBobState();
+    // Malicious relay: Bob's real IK_B stays, but SPK_B and its signature are
+    // the attacker's. Under a self-referential signing key this would verify.
+    const forged = {
+      ...bob.bundle,
+      spkBPub: attacker.bundle.spkBPub,
+      spkSignature: attacker.bundle.spkSignature
+    };
+    expect(verifySpkSignature(forged)).toBe(false);
+    // The same material verifies fine under the attacker's OWN identity key,
+    // proving the rejection is the identity binding and not a malformed sig.
+    expect(verifySpkSignature({ ...forged, ikBPub: attacker.bundle.ikBPub })).toBe(true);
+  });
+
+  it("rejects a substituted identity key", () => {
+    const bob = createBobState();
+    const attacker = createBobState();
+    expect(verifySpkSignature({ ...bob.bundle, ikBPub: attacker.bundle.ikBPub })).toBe(false);
   });
 });
 
@@ -145,14 +179,24 @@ describe("buildDemoState (full end-to-end flow)", () => {
   });
 
   it("scenario: tampering the SPK signature flips verification to invalid but the secret still forms", async () => {
-    const demo = await buildDemoState({ tamperSpkSignature: true, dropOpk: false, corruptEkA: false });
+    const demo = await buildDemoState({ ...DEFAULT_SCENARIO, tamperSpkSignature: true });
     expect(demo.signatureOk).toBe(false);
     // The DH agreement does not depend on the signature, so SK still matches.
     expect(demo.matchingSecrets).toBe(true);
   });
 
+  it("scenario: a relay swapping in its own signed prekey is caught by the IK_B check", async () => {
+    const demo = await buildDemoState({ ...DEFAULT_SCENARIO, substituteSpk: true });
+    expect(demo.spkSubstituted).toBe(true);
+    // The attacker's signature is internally valid but not under Bob's IK_B.
+    expect(demo.signatureOk).toBe(false);
+    // Alice ran DH1/DH3 against the attacker's prekey, so the secrets diverge.
+    expect(demo.matchingSecrets).toBe(false);
+    expect(demo.decryptedByBob).toBeNull();
+  });
+
   it("scenario: dropping the OPK still yields matching secrets (weaker forward secrecy, not broken)", async () => {
-    const demo = await buildDemoState({ tamperSpkSignature: false, dropOpk: true, corruptEkA: false });
+    const demo = await buildDemoState({ ...DEFAULT_SCENARIO, dropOpk: true });
     expect(demo.withOpk).toBe(false);
     expect(demo.aliceDh.dh4).toBeNull();
     expect(demo.matchingSecrets).toBe(true);
@@ -160,7 +204,7 @@ describe("buildDemoState (full end-to-end flow)", () => {
   });
 
   it("scenario: corrupting one byte of EK_A on the wire breaks the shared secret and decryption", async () => {
-    const demo = await buildDemoState({ tamperSpkSignature: false, dropOpk: false, corruptEkA: true });
+    const demo = await buildDemoState({ ...DEFAULT_SCENARIO, corruptEkA: true });
     expect(demo.matchingSecrets).toBe(false);
     // AES-GCM authentication genuinely fails under the mismatched key.
     expect(demo.decryptedByBob).toBeNull();

@@ -1,5 +1,6 @@
-import { ed25519, x25519 } from "@noble/curves/ed25519";
+import { x25519 } from "@noble/curves/ed25519";
 import { concatDhWithDomainSeparator, hkdfSha256 } from "./kdf";
+import { xeddsaSign, xeddsaVerify } from "./xeddsa";
 
 const encoder = new TextEncoder();
 
@@ -14,25 +15,24 @@ export type X25519KeyPair = {
   publicKey: Uint8Array;
 };
 
-export type Ed25519KeyPair = {
-  privateKey: Uint8Array;
-  publicKey: Uint8Array;
-};
-
 export type BobBundle = {
   ikBPub: Uint8Array;
   spkBPub: Uint8Array;
   opkBPub: Uint8Array;
   opkId: number;
+  /**
+   * XEdDSA signature over SPK_B, made with Bob's IDENTITY secret. There is
+   * deliberately no `signingPub` field: the verifier derives the signing public
+   * key from `ikBPub` itself, so there is nothing here an attacker could swap to
+   * make an SPK of their own choosing verify.
+   */
   spkSignature: Uint8Array;
-  signingPub: Uint8Array;
 };
 
 export type BobState = {
   ikB: X25519KeyPair;
   spkB: X25519KeyPair;
   opkB: X25519KeyPair;
-  signing: Ed25519KeyPair;
   bundle: BobBundle;
 };
 
@@ -62,12 +62,6 @@ function generateX25519KeyPair(): X25519KeyPair {
   return { privateKey, publicKey };
 }
 
-function generateEd25519KeyPair(): Ed25519KeyPair {
-  const privateKey = ed25519.utils.randomPrivateKey();
-  const publicKey = ed25519.getPublicKey(privateKey);
-  return { privateKey, publicKey };
-}
-
 export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -93,28 +87,40 @@ export function createBobState(): BobState {
   const ikB = generateX25519KeyPair();
   const spkB = generateX25519KeyPair();
   const opkB = generateX25519KeyPair();
-  const signing = generateEd25519KeyPair();
 
-  const spkSignature = ed25519.sign(spkB.publicKey, signing.privateKey);
+  // Sig(IK_B, Encode(SPK_B)) — X3DH §3.2. The identity secret that performs
+  // DH2 is the same secret that signs, which is exactly what makes the
+  // signature an authentication of Bob rather than a self-referential loop.
+  const spkSignature = xeddsaSign(ikB.privateKey, spkB.publicKey);
 
   return {
     ikB,
     spkB,
     opkB,
-    signing,
     bundle: {
       ikBPub: ikB.publicKey,
       spkBPub: spkB.publicKey,
       opkBPub: opkB.publicKey,
       opkId: 100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000),
-      spkSignature,
-      signingPub: signing.publicKey
+      spkSignature
     }
   };
 }
 
+/**
+ * Verify the bundle's signed prekey against the bundle's OWN identity key.
+ *
+ * What this proves: whoever holds the secret for `ikBPub` chose `spkBPub`. So a
+ * relay that swaps in its own prekey while leaving Bob's real identity key in
+ * place is caught here.
+ *
+ * What this does NOT prove: that `ikBPub` is Bob's. Nothing inside a bundle can
+ * establish that — real deployments pin the identity key out of band (Signal's
+ * safety numbers). Substituting the whole bundle, identity key included, still
+ * yields a self-consistent bundle; it just is not Bob's.
+ */
 export function verifySpkSignature(bundle: BobBundle): boolean {
-  return ed25519.verify(bundle.spkSignature, bundle.spkBPub, bundle.signingPub);
+  return xeddsaVerify(bundle.ikBPub, bundle.spkBPub, bundle.spkSignature);
 }
 
 export function createAliceState(): AliceState {
@@ -199,20 +205,24 @@ export async function decryptInitialMessage(
 }
 
 /**
- * The four experiments a learner can toggle. Each one performs REAL crypto:
- * `tamperSpkSignature` flips a byte and the Ed25519 verify genuinely fails;
+ * The experiments a learner can toggle. Each one performs REAL crypto:
+ * `tamperSpkSignature` flips a byte and the XEdDSA verify genuinely fails;
+ * `substituteSpk` swaps in an attacker's prekey signed by the attacker's own
+ * identity key, and the verify against Bob's IK_B genuinely rejects it;
  * `dropOpk` genuinely omits DH4 from both derivations; `corruptEkA` genuinely
  * corrupts the public EK_A Alice sends so Bob's reconstructed key no longer
  * matches. Nothing here fakes an outcome — the visualization reads the truth.
  */
 export type Scenario = {
   tamperSpkSignature: boolean;
+  substituteSpk: boolean;
   dropOpk: boolean;
   corruptEkA: boolean;
 };
 
 export const DEFAULT_SCENARIO: Scenario = {
   tamperSpkSignature: false,
+  substituteSpk: false,
   dropOpk: false,
   corruptEkA: false
 };
@@ -225,11 +235,23 @@ export async function buildDemoState(
   const alice = seed?.alice ?? createAliceState();
 
   // (b) Tamper the SPK signature: flip a byte on a COPY of the bundle so the
-  // Ed25519 verification honestly fails, without corrupting the raw keypair.
+  // XEdDSA verification honestly fails, without corrupting the raw keypair.
   const bundle: BobBundle = { ...bob.bundle, spkSignature: Uint8Array.from(bob.bundle.spkSignature) };
   if (scenario.tamperSpkSignature) {
     bundle.spkSignature[0] ^= 0xff;
   }
+
+  // Malicious relay: keep Bob's real IK_B in the bundle but swap SPK_B for a
+  // prekey the attacker holds, signed with the ATTACKER's identity key. This is
+  // the attack the signed prekey exists to stop, and it is caught only because
+  // the signature is checked against IK_B. Were the bundle to carry its own
+  // signing public key, the attacker would simply publish theirs and pass.
+  const attacker = scenario.substituteSpk ? createBobState() : null;
+  if (attacker) {
+    bundle.spkBPub = attacker.spkB.publicKey;
+    bundle.spkSignature = xeddsaSign(attacker.ikB.privateKey, attacker.spkB.publicKey);
+  }
+
   const signatureOk = verifySpkSignature(bundle);
 
   const withOpk = !scenario.dropOpk;
@@ -277,6 +299,7 @@ export async function buildDemoState(
     bundle,
     withOpk,
     signatureOk,
+    spkSubstituted: attacker !== null,
     aliceDh,
     bobDh,
     aliceSk,

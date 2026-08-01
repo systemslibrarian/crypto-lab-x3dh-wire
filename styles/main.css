@@ -351,6 +351,21 @@ footer {
   color: var(--accent);
 }
 
+/* Caution notes carry the disclosures a learner must not miss (what a
+   guarantee does NOT cover, and what the demo deliberately omits), so they
+   get a rule and a tint rather than blending into the surrounding prose. */
+.small-note--caution {
+  border-left: 3px solid var(--warn, #e8b339);
+  background: color-mix(in oklab, var(--warn, #e8b339) 8%, transparent);
+  padding: 0.7rem 0.9rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: var(--text);
+}
+
+.small-note--caution strong {
+  color: var(--warn, #e8b339);
+}
+
 /* ═══════════════════════════════════
    Responsive breakpoints
    ═══════════════════════════════════ */

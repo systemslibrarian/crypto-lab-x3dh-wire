@@ -45,7 +45,9 @@ const GLOSSARY: Record<string, string> = {
   "forward secrecy":
     "If a long-term key leaks later, past sessions stay safe — because each used an ephemeral/one-time key that no longer exists.",
   xeddsa:
-    "A scheme that lets one X25519 key be used to make Ed25519-style signatures. Real X3DH uses it; this demo signs with plain Ed25519 as an in-spec stand-in.",
+    "Signal's scheme for making Ed25519-style signatures with an X25519 key, so ONE identity key can both do Diffie-Hellman and sign. X3DH requires it, and this demo implements it: SPK_B is signed with Bob's IK_B secret and verified against IK_B itself.",
+  "associated data":
+    "AD = Encode(IK_A) ‖ Encode(IK_B), which real X3DH feeds to the AEAD alongside the ciphertext so the encrypted message is cryptographically bound to both identities. This demo omits AD — see the note on Panel 5.",
   "domain separator":
     "The 32 bytes of 0xFF prepended before the DH outputs (57 bytes for X448). The X3DH spec gives its purpose plainly: cryptographic domain separation with XEdDSA, so this KDF input can never be confused with material XEdDSA signs.",
   "info string":
@@ -65,7 +67,7 @@ function renderPrimitiveChips(): string {
     <ul class="primitive-chips" aria-label="Cryptographic primitives used">
       <li>X25519</li>
       <li>HKDF-SHA-256</li>
-      <li>Ed25519</li>
+      <li>XEdDSA</li>
     </ul>
   `;
 }
@@ -170,7 +172,8 @@ function renderControls(scenario: Scenario): string {
       <p class="lab-lead">Every toggle re-runs the real handshake in your browser and shows the true downstream effect. Nothing here is pre-baked.</p>
       <div class="lab-grid">
         <button type="button" class="lab-regen" id="lab-regenerate" aria-label="Regenerate all keys and re-run the handshake">↻ Regenerate all keys</button>
-        ${toggle("tamperSpkSignature", scenario.tamperSpkSignature, "Tamper SPK signature", "flip a byte → Ed25519 verify fails")}
+        ${toggle("tamperSpkSignature", scenario.tamperSpkSignature, "Tamper SPK signature", "flip a byte → XEdDSA verify fails")}
+        ${toggle("substituteSpk", scenario.substituteSpk, "Relay swaps SPK_B", "attacker's prekey, signed by the attacker → rejected by IK_B")}
         ${toggle("dropOpk", scenario.dropOpk, "Drop one-time prekey", "omit DH4 → weaker forward secrecy, SK still forms")}
         ${toggle("corruptEkA", scenario.corruptEkA, "Corrupt EK_A byte on wire", "flip a byte → Bob's SK diverges, decrypt fails")}
       </div>
@@ -210,11 +213,24 @@ function renderPanel1(data: DemoData): string {
         <div><strong>IK_B public (X25519)</strong>${hexChip(data.bundle.ikBPub, "pub", false, "IK_B public")}</div>
         <div><strong>SPK_B public (X25519)</strong>${hexChip(data.bundle.spkBPub, "pub", false, "SPK_B public")}</div>
         <div><strong>OPK_B public (X25519)</strong>${data.withOpk ? hexChip(data.bundle.opkBPub, "pub", false, "OPK_B public") : hexChip(null, "pub", false, "OPK_B")}</div>
-        <div><strong>SPK signature (Ed25519)</strong>${hexChip(data.bundle.spkSignature, "bob", false, "SPK signature")}</div>
-        <div><strong>Signing public key</strong>${hexChip(data.bundle.signingPub, "pub", false, "Signing public key")}</div>
-        <div><strong>Signature verification</strong><code class="verdict ${data.signatureOk ? "verdict--ok" : "verdict--bad"}">${data.signatureOk ? "valid" : "INVALID — tampered"}</code></div>
+        <div><strong>SPK signature — Sig(IK_B, SPK_B)</strong>${hexChip(data.bundle.spkSignature, "bob", false, "SPK signature")}</div>
+        <div><strong>Verified against</strong><code class="inline-code">IK_B public — no separate signing key</code></div>
+        <div><strong>Signature verification</strong><code class="verdict ${data.signatureOk ? "verdict--ok" : "verdict--bad"}">${data.signatureOk ? "valid" : data.spkSubstituted ? "INVALID — SPK_B is not signed by this IK_B" : "INVALID — tampered"}</code></div>
       </div>
-      <p class="small-note">Signature shown with Ed25519 as an in-spec equivalent to ${term("XEdDSA", "xeddsa")}-style SPK authentication in real X3DH deployments.</p>
+      <p class="small-note">
+        SPK_B is signed with Bob's <em>identity</em> secret using ${term("XEdDSA", "xeddsa")}, exactly as
+        <a href="https://signal.org/docs/specifications/x3dh/#keys" target="_blank" rel="noreferrer">X3DH §2.1</a> specifies
+        (<code class="inline-code">Sig(IK_B, Encode(SPK_B))</code>). XEdDSA lets one X25519 key both do Diffie-Hellman
+        and sign, so the verifier re-derives the signing public key from <code class="inline-code">IK_B</code> by the
+        birational map <code class="inline-code">y = (u − 1)/(u + 1)</code> — the bundle publishes no separate signing key.
+      </p>
+      <p class="small-note small-note--caution">
+        <strong>Read the guarantee precisely.</strong> A valid signature proves that <em>whoever holds the secret behind
+        this IK_B</em> chose this SPK_B — so a relay that swaps in its own prekey is caught. It does <em>not</em> prove
+        that IK_B is Bob's. No field inside a bundle can prove that: an attacker who replaces the entire bundle produces
+        one that is internally consistent and verifies. Real deployments close that gap out of band, by having users
+        compare identity-key fingerprints (Signal's safety numbers).
+      </p>
     </section>
   `;
 }
@@ -401,7 +417,7 @@ function equalBytesHex(a: string, b: string): boolean {
 
 function renderPanel3(data: DemoData, view: DhView): string {
   const rows: { n: 1 | 2 | 3 | 4; formA: string; formB: string; why: string; threat: string; dh: Uint8Array | null }[] = [
-    { n: 1, formA: "DH(IK_A, SPK_B)", formB: "DH(SPK_B, IK_A)", why: "mutual authentication via Bob's signed prekey", threat: "Uses Alice's long-term identity IK_A against Bob's signed prekey. An attacker without Alice's IK_A private key cannot produce this term, so it authenticates the initiator to Bob.", dh: data.aliceDh.dh1 },
+    { n: 1, formA: "DH(IK_A, SPK_B)", formB: "DH(SPK_B, IK_A)", why: "mutual authentication via Bob's signed prekey", threat: "Uses Alice's long-term identity IK_A against Bob's signed prekey. An attacker without Alice's IK_A private key cannot produce this term, so it authenticates the initiator to Bob. The other direction — Bob to Alice — rests entirely on the SPK signature: SPK_B counts as Bob's only because it is signed under IK_B, and IK_B counts as Bob's only because it was verified out of band. Break either link and DH1 authenticates Alice to a stranger.", dh: data.aliceDh.dh1 },
     { n: 2, formA: "DH(EK_A, IK_B)", formB: "DH(IK_B, EK_A)", why: "binds Alice's ephemeral to Bob's long-term identity", threat: "Mixes Alice's fresh ephemeral with Bob's long-term IK_B, so the session is bound to Bob's identity — a stranger who is not Bob cannot reconstruct it.", dh: data.aliceDh.dh2 },
     { n: 3, formA: "DH(EK_A, SPK_B)", formB: "DH(SPK_B, EK_A)", why: "fresh ephemeral contribution toward forward secrecy", threat: "Alice's single-use ephemeral against Bob's rotated signed prekey. Because EK_A is discarded after the handshake, a later theft of long-term keys cannot recompute this term.", dh: data.aliceDh.dh3 },
     { n: 4, formA: "DH(EK_A, OPK_B)", formB: "DH(OPK_B, EK_A)", why: "one-time prekey component adding one-time forward secrecy", threat: "Alice's ephemeral against a prekey Bob deletes after one use. Once consumed, neither side can regenerate it, giving even the first message its own forward secrecy.", dh: data.aliceDh.dh4 }
@@ -556,6 +572,15 @@ function renderPanel5(data: DemoData): string {
         <div><strong>First encrypted message</strong>${hexChip(data.initialMessage.ciphertext, "pub", false, "Ciphertext")}</div>
         <div><strong>Bob decrypts</strong><code class="verdict ${ok ? "verdict--ok" : "verdict--bad"}">${ok ? data.decryptedByBob : "✗ authentication failed — key mismatch"}</code></div>
       </div>
+      <p class="small-note small-note--caution">
+        <strong>Documented omission: no associated data.</strong> Real X3DH computes
+        ${term("AD", "associated data")} <code class="inline-code">= Encode(IK_A) ‖ Encode(IK_B)</code> and passes it to the
+        AEAD as associated data (<a href="https://signal.org/docs/specifications/x3dh/#sending-the-initial-message" target="_blank" rel="noreferrer">X3DH §3.3</a>).
+        This demo calls AES-GCM with <em>no</em> AD field at all, so the ciphertext here is authenticated under the derived
+        key but is not cryptographically bound to the two identity keys. Omitting AD is a real weakening, not a
+        simplification of notation: it drops the spec's defence against an attacker replaying or re-contextualising a
+        message under a different pair of identities.
+      </p>
       <p class="bridge-text">This SK becomes the root key for the Double Ratchet — see <a href="https://github.com/systemslibrarian/crypto-lab-ratchet-wire" target="_blank" rel="noreferrer">crypto-lab-ratchet-wire</a>.</p>
     </section>
   `;
