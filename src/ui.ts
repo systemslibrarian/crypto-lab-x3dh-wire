@@ -30,6 +30,19 @@ function hexChip(bytes: Uint8Array | null, owner: "alice" | "bob" | "pub", secre
   return `<button type="button" class="hexchip hexchip--${owner} hexchip--${kind}" data-full="${hex}" data-short="${shortHex(hex)}" aria-label="${label}: ${kind} key, ${hex.length / 2} bytes. Activate to reveal full hex." title="${hex}"><span class="hexchip-dot" aria-hidden="true"></span><span class="hexchip-hex">${shortHex(hex)}</span></button>`;
 }
 
+// ── Key/value rows ───────────────────────────────────────────────────────
+// Every `.kv-grid` row is an `overflow-x: auto` scroll container: it holds
+// 64-char hex and non-wrapping code tokens that scroll sideways rather than
+// blow the grid out of the viewport. A region that scrolls has to be operable
+// by keyboard, so each row carries `tabindex="0"` + `role="group"` + an
+// `aria-label` naming what it contains — axe `scrollable-region-focusable`
+// (serious), and the fleet rule in audits/_MASTER-TEMPLATE.md §4.2. Applied to
+// every row, not just the ones that happen to overflow at today's viewport
+// width, because which rows scroll shifts with content length and screen size.
+function kvRow(label: string, value: string): string {
+  return `<div role="group" tabindex="0" aria-label="${label}"><strong>${label}</strong>${value}</div>`;
+}
+
 // ── Glossary ─────────────────────────────────────────────────────────────
 // First-use tooltips: a dotted term expands its one-line definition inline via
 // a popover-like <button> with aria-describedby wiring for screen readers.
@@ -210,12 +223,12 @@ function renderPanel1(data: DemoData): string {
         Alice fetches it and begins a secure session <em>asynchronously</em> — the whole point of X3DH.
       </p>
       <div class="kv-grid">
-        <div><strong>IK_B public (X25519)</strong>${hexChip(data.bundle.ikBPub, "pub", false, "IK_B public")}</div>
-        <div><strong>SPK_B public (X25519)</strong>${hexChip(data.bundle.spkBPub, "pub", false, "SPK_B public")}</div>
-        <div><strong>OPK_B public (X25519)</strong>${data.withOpk ? hexChip(data.bundle.opkBPub, "pub", false, "OPK_B public") : hexChip(null, "pub", false, "OPK_B")}</div>
-        <div><strong>SPK signature — Sig(IK_B, SPK_B)</strong>${hexChip(data.bundle.spkSignature, "bob", false, "SPK signature")}</div>
-        <div><strong>Verified against</strong><code class="inline-code">IK_B public — no separate signing key</code></div>
-        <div><strong>Signature verification</strong><code class="verdict ${data.signatureOk ? "verdict--ok" : "verdict--bad"}">${data.signatureOk ? "valid" : data.spkSubstituted ? "INVALID — SPK_B is not signed by this IK_B" : "INVALID — tampered"}</code></div>
+        ${kvRow("IK_B public (X25519)", hexChip(data.bundle.ikBPub, "pub", false, "IK_B public"))}
+        ${kvRow("SPK_B public (X25519)", hexChip(data.bundle.spkBPub, "pub", false, "SPK_B public"))}
+        ${kvRow("OPK_B public (X25519)", data.withOpk ? hexChip(data.bundle.opkBPub, "pub", false, "OPK_B public") : hexChip(null, "pub", false, "OPK_B"))}
+        ${kvRow("SPK signature — Sig(IK_B, SPK_B)", hexChip(data.bundle.spkSignature, "bob", false, "SPK signature"))}
+        ${kvRow("Verified against", `<code class="inline-code">IK_B public — no separate signing key</code>`)}
+        ${kvRow("Signature verification", `<code class="verdict ${data.signatureOk ? "verdict--ok" : "verdict--bad"}">${data.signatureOk ? "valid" : data.spkSubstituted ? "INVALID — SPK_B is not signed by this IK_B" : "INVALID — tampered"}</code>`)}
       </div>
       <p class="small-note">
         SPK_B is signed with Bob's <em>identity</em> secret using ${term("XEdDSA", "xeddsa")}, exactly as
@@ -244,12 +257,12 @@ function renderPanel2(data: DemoData): string {
       ${renderTimeline(1)}
       <p>Alice generates her identity key IK_A and a fresh ${term("ephemeral key", "ephemeral key")} EK_A, then fetches Bob's bundle. Bob is still offline.</p>
       <div class="kv-grid">
-        <div><strong>IK_A public</strong>${hexChip(data.alice.ikA.publicKey, "alice", false, "IK_A public")}</div>
-        <div><strong>EK_A public</strong>${hexChip(data.alice.ekA.publicKey, "alice", false, "EK_A public")}</div>
-        <div><strong>Fetched IK_B public</strong>${hexChip(data.bundle.ikBPub, "pub", false, "IK_B public")}</div>
-        <div><strong>Fetched SPK_B public</strong>${hexChip(data.bundle.spkBPub, "pub", false, "SPK_B public")}</div>
-        <div><strong>Fetched OPK_B public</strong>${data.withOpk ? hexChip(data.bundle.opkBPub, "pub", false, "OPK_B public") : hexChip(null, "pub", false, "OPK_B")}</div>
-        <div><strong>Fetched OPK id</strong><code>${data.withOpk ? data.bundle.opkId : "— (none)"}</code></div>
+        ${kvRow("IK_A public", hexChip(data.alice.ikA.publicKey, "alice", false, "IK_A public"))}
+        ${kvRow("EK_A public", hexChip(data.alice.ekA.publicKey, "alice", false, "EK_A public"))}
+        ${kvRow("Fetched IK_B public", hexChip(data.bundle.ikBPub, "pub", false, "IK_B public"))}
+        ${kvRow("Fetched SPK_B public", hexChip(data.bundle.spkBPub, "pub", false, "SPK_B public"))}
+        ${kvRow("Fetched OPK_B public", data.withOpk ? hexChip(data.bundle.opkBPub, "pub", false, "OPK_B public") : hexChip(null, "pub", false, "OPK_B"))}
+        ${kvRow("Fetched OPK id", `<code>${data.withOpk ? data.bundle.opkId : "— (none)"}</code>`)}
       </div>
     </section>
   `;
@@ -565,12 +578,12 @@ function renderPanel5(data: DemoData): string {
         Bob reconstructs SK from his side and decrypts.
       </p>
       <div class="kv-grid">
-        <div><strong>Header: EK_A public</strong>${hexChip(data.initialMessage.ekAPub, "alice", false, "EK_A on wire")}</div>
-        <div><strong>Header: IK_A public</strong>${hexChip(data.initialMessage.ikAPub, "alice", false, "IK_A on wire")}</div>
-        <div><strong>Header: OPK_B id</strong><code>${data.withOpk ? data.initialMessage.opkId : "— (none)"}</code></div>
-        <div><strong>AES-GCM IV</strong>${hexChip(data.initialMessage.iv, "pub", false, "AES-GCM IV")}</div>
-        <div><strong>First encrypted message</strong>${hexChip(data.initialMessage.ciphertext, "pub", false, "Ciphertext")}</div>
-        <div><strong>Bob decrypts</strong><code class="verdict ${ok ? "verdict--ok" : "verdict--bad"}">${ok ? data.decryptedByBob : "✗ authentication failed — key mismatch"}</code></div>
+        ${kvRow("Header: EK_A public", hexChip(data.initialMessage.ekAPub, "alice", false, "EK_A on wire"))}
+        ${kvRow("Header: IK_A public", hexChip(data.initialMessage.ikAPub, "alice", false, "IK_A on wire"))}
+        ${kvRow("Header: OPK_B id", `<code>${data.withOpk ? data.initialMessage.opkId : "— (none)"}</code>`)}
+        ${kvRow("AES-GCM IV", hexChip(data.initialMessage.iv, "pub", false, "AES-GCM IV"))}
+        ${kvRow("First encrypted message", hexChip(data.initialMessage.ciphertext, "pub", false, "Ciphertext"))}
+        ${kvRow("Bob decrypts", `<code class="verdict ${ok ? "verdict--ok" : "verdict--bad"}">${ok ? data.decryptedByBob : "✗ authentication failed — key mismatch"}</code>`)}
       </div>
       <p class="small-note small-note--caution">
         <strong>Documented omission: no associated data.</strong> Real X3DH computes
