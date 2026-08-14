@@ -67,10 +67,18 @@ const GLOSSARY: Record<string, string> = {
     "The ASCII label 'WhisperText' fed into HKDF. It binds this derived key to the X3DH application so the same DH bytes used elsewhere would produce a different key."
 };
 
+// The suffix keeps every tooltip id unique across the DOCUMENT, not just
+// within one template: "ephemeral key" is rendered by both the who-holds-what
+// grid and Panel 2, and a repeated id referenced from aria-describedby is a
+// WCAG 4.1.2 failure (axe: duplicate-id-aria). The counter never resets — ids
+// change across re-renders, but each aria-describedby is emitted in the same
+// template string as its target, so the pair always agrees.
+let glossSeq = 0;
+
 function term(text: string, key: string): string {
   const def = GLOSSARY[key.toLowerCase()];
   if (!def) return text;
-  const id = `gloss-${key.toLowerCase().replace(/[^a-z]+/g, "-")}`;
+  const id = `gloss-${key.toLowerCase().replace(/[^a-z]+/g, "-")}-${++glossSeq}`;
   return `<button type="button" class="gloss" aria-describedby="${id}"><span class="gloss-term">${text}</span><span class="gloss-pop" role="tooltip" id="${id}">${def}</span></button>`;
 }
 
@@ -378,6 +386,11 @@ function renderCrossing(withOpk: boolean, view: DhView): string {
   `;
 }
 
+// Naming note for this widget and the Panel 4 figure: a bare <div> maps to the
+// `generic` role, which PROHIBITS aria-label/aria-labelledby — the label is
+// silently discarded (axe: aria-prohibited-attr, surfaced only in its
+// `incomplete` bucket). Each labelled <div> therefore carries role="group".
+//
 // The one idea that makes X3DH click: DH(a, B) = DH(b, A) because both equal the
 // point g^(ab)=g^(ba). We take ONE real leg (DH2: EK_A × IK_B) and show Alice's
 // computation (her EK_A private × Bob's IK_B public) beside Bob's (his IK_B
@@ -391,7 +404,7 @@ function renderCommutativity(data: DemoData): string {
   const bobHex = bytesToHex(bobOut);
   const identical = equalBytesHex(aliceHex, bobHex);
   return `
-    <div class="commute" aria-labelledby="commute-heading">
+    <div class="commute" role="group" aria-labelledby="commute-heading">
       <h3 id="commute-heading" class="commute-h">Why do two different computations agree?</h3>
       <p class="commute-lead">
         Take one pair — <b>DH2</b>. Alice never sees Bob's private key and Bob
@@ -485,7 +498,7 @@ function renderConvergence(legs: Leg[], skHex: string): string {
     )
     .join("");
   return `
-    <div class="converge2" aria-label="How the shared secret is assembled from concatenated DH outputs">
+    <div class="converge2" role="group" aria-label="How the shared secret is assembled from concatenated DH outputs">
       <p class="converge2-cap">
         <b>Step 1 — concatenate.</b> The domain separator <b>F</b> and each 32-byte
         DH output line up head-to-tail into one byte string
@@ -681,12 +694,15 @@ function renderAppShell(data: DemoData, state: LabState): string {
     <main id="main-content" class="app-shell" aria-label="X3DH Protocol Demo">
       <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode" hidden>🌙</button>
       <header class="cl-hero">
+        <!-- role="note", not the aside's implicit "complementary": this hero
+             lives INSIDE <main>, and a complementary landmark nested in another
+             landmark fails axe's landmark-complementary-is-top-level. -->
         <div class="cl-hero-main">
           <h1 class="cl-hero-title">X3DH</h1>
           <p class="cl-hero-sub">Extended Triple Diffie-Hellman · X25519 + HKDF</p>
           <p class="cl-hero-desc">Derives a shared secret from Bob's offline prekey bundle by combining four X25519 DH operations through HKDF, so you can watch Alice open an encrypted session before Bob ever comes online.</p>
         </div>
-        <aside class="cl-hero-why" aria-label="Why it matters">
+        <aside class="cl-hero-why" role="note" aria-label="Why it matters">
           <span class="cl-hero-why-label">WHY IT MATTERS</span>
           <p class="cl-hero-why-text">Secure messengers must let people start a conversation without both parties being online at once. X3DH is the handshake Signal and WhatsApp use to make that first message private, and its forward secrecy limits the damage if a key is later stolen.</p>
         </aside>

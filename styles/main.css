@@ -17,6 +17,11 @@
      47 sites reach for --border — so one is introduced here rather than
      weakening the divider. #7d93a8 measures 4.02:1 on --surface-soft. */
   --control-border: #7d93a8;
+  /* The caution-note tone. Every use site wrote `var(--warn, #e8b339)` but no
+     theme ever DEFINED --warn, so the amber fallback rendered in both themes —
+     fine on dark (7.8:1) and 1.8:1 as bold text on the light theme's tinted
+     note background. Defined per theme; the fallbacks in the use sites stay. */
+  --warn: #e8b339;
   --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
   --focus-ring: 0 0 0 3px var(--accent);
 }
@@ -29,11 +34,16 @@
   --text: #1f2430;
   --text-dim: #4a5362;
   --accent: #0a7a52; /* WCAG AA: 5.07:1 on light surface */
-  --accent-2: #9a5600; /* WCAG AA: 4.76:1 on light surface */
+  --accent-2: #8a4d00; /* WCAG AA: ~5.7:1 on light surface, and — the binding
+     case — 5.1:1 as the DH4 label on .km-block--4's 12% amber tint, where the
+     previous #9a5600 measured 4.31:1 */
   --border: #d9cdb6;
   /* Light-theme companion, warm to match this palette: 4.41:1 on --surface-soft
      (#f6ead4), where the divider token measures the same 1.32:1 as in dark. */
   --control-border: #7a6a4e;
+  /* Dark amber: ~5.6:1 as the caution note's bold lead on the note's tinted
+     background, where the undefined-token fallback #e8b339 measured 1.8:1. */
+  --warn: #8a5200;
   --shadow: 0 18px 40px rgba(70, 45, 0, 0.12);
   --focus-ring: 0 0 0 3px var(--accent);
 }
@@ -201,7 +211,10 @@ h1 {
 .cl-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:clamp(1rem,4vw,3rem);flex-wrap:wrap;margin:clamp(1rem,3vw,2rem) 0 1.5rem;}
 .cl-hero-main{flex:1 1 22rem;min-width:min(100%,20rem);}
 .cl-hero-title{margin:0;font-size:clamp(1.6rem,3.8vw,2.7rem);font-weight:700;line-height:1.1;letter-spacing:.01em;color:var(--text);}
-.cl-hero-sub{margin:.4rem 0 0;font-size:clamp(.9rem,1.6vw,1.05rem);letter-spacing:.01em;color:var(--text-dim);opacity:.85;}
+/* No opacity fade on the subtitle: at .85 the light theme's --text-dim
+   composites to 4.39:1 on the body wash behind the hero (1.4.3 needs 4.5:1).
+   The dim token alone carries the hierarchy. */
+.cl-hero-sub{margin:.4rem 0 0;font-size:clamp(.9rem,1.6vw,1.05rem);letter-spacing:.01em;color:var(--text-dim);}
 .cl-hero-desc{margin:.55rem 0 0;font-size:1rem;line-height:1.5;color:var(--text-dim);max-width:60ch;}
 .cl-hero-why{flex:0 1 min(40%,26rem);min-width:min(100%,15rem);border:1px solid color-mix(in oklab, var(--accent) 45%, var(--border));border-radius:10px;padding:.85rem 1.05rem;background:color-mix(in oklab, var(--accent) 8%, var(--bg));}
 .cl-hero-why-label{display:block;font-size:.68rem;font-weight:700;letter-spacing:.14em;color:var(--text-dim);}
@@ -355,6 +368,16 @@ footer {
   padding: 0 0.5rem;
 }
 
+/* The related-demo links had no colour rule at all, so they rendered in the
+   UA's default link blue — which, with the page's color-scheme meta resolving
+   dark, is a light blue that fell to ~2:1 on the light theme (and the whole
+   footer was further faded by an inline opacity: 0.7, since removed).
+   --pub-ink, not --accent: the footer sits directly on the body's amber wash,
+   where the light accent #0a7a52 measures 4.2:1; #075c3d measures 6.4:1. */
+footer a {
+  color: var(--pub-ink);
+}
+
 /* ── Small note link coloring ── */
 .small-note a {
   color: var(--accent);
@@ -373,6 +396,13 @@ footer {
 
 .small-note--caution strong {
   color: var(--warn, #e8b339);
+}
+
+/* Links inside a caution note sit on the warn-tinted background, where the
+   light accent measured 4.48:1 — two hundredths under AA. --pub-ink clears it
+   with room (6.4:1 light, ~11:1 dark). */
+.small-note--caution a {
+  color: var(--pub-ink);
 }
 
 /* ═══════════════════════════════════
@@ -680,13 +710,35 @@ footer {
   font-size: 0.82rem;
   line-height: 1.45;
   text-align: left;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s ease;
+  /* display: none at rest, not visibility: hidden. A hidden-but-laid-out
+     220px box anchored to a term near the right edge still stretches the
+     DOCUMENT: at 380px the resting popovers pushed scrollWidth to 407–473px,
+     a real WCAG 1.4.10 reflow failure on every panel that renders a glossary
+     term. display: none removes the box from layout entirely; the open state
+     swaps it back in. (The 0.12s fade is lost — a display switch cannot
+     transition — which is the right trade for a page that must not scroll
+     sideways while the popover is shut.) */
+  display: none;
   pointer-events: none;
 }
 .gloss:hover .gloss-pop,
-.gloss:focus-visible .gloss-pop { opacity: 1; visibility: visible; }
+.gloss:focus-visible .gloss-pop { display: block; }
+/* On phone widths an OPEN popover anchored at a term's left edge can jut past
+   the viewport (left offset + 78vw). position: fixed keeps the term's own
+   vertical spot (top/bottom auto = static position) while spanning the
+   viewport horizontally — and a fixed box never contributes to the document's
+   scroll width, so the open state cannot re-introduce the 1.4.10 failure the
+   resting state had. */
+@media (max-width: 640px) {
+  .gloss-pop {
+    position: fixed;
+    left: 0.9rem;
+    right: 0.9rem;
+    bottom: auto;
+    width: auto;
+    max-width: none;
+  }
+}
 
 /* ── Timeline strip ── */
 .timeline {
@@ -859,7 +911,10 @@ footer {
 .commute-verdict--same { color: var(--ok-ink); }
 .commute-verdict--diff { color: var(--bad-ink); }
 .commute-regen {
-  border: 1px solid var(--border);
+  /* --control-border, not --border: the fill is a 70% surface-soft mix over
+     the commute widget's own tint, so this edge is the control's only
+     delineator, and the divider token measures ~1.3:1 (WCAG 1.4.11 needs 3:1). */
+  border: 1px solid var(--control-border);
   background: color-mix(in oklab, var(--surface-soft) 70%, transparent);
   color: var(--text);
   border-radius: 0.6rem;

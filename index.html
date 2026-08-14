@@ -169,7 +169,10 @@
         </p>
       </noscript>
     </div>
-    <footer style="text-align:center; padding: 1.5rem; font-size: 0.85rem; opacity: 0.7; margin-top: 2rem;">
+    <!-- No opacity fade here: an inline opacity: 0.7 composited the 13.6px
+         footer text down to ~3.4:1 in the light theme (WCAG 1.4.3 needs 4.5:1).
+         The muted tone comes from the stylesheet's --text-dim instead. -->
+    <footer style="text-align:center; padding: 1.5rem; font-size: 0.85rem; margin-top: 2rem;">
       <p class="footer-related">
         Related demos:
         <a href="https://systemslibrarian.github.io/crypto-lab-ratchet-wire/">crypto-lab-ratchet-wire</a> ·
