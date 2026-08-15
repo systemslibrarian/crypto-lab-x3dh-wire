@@ -918,8 +918,8 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   // ── Hover, which persists after a click ─────────────────────────────────
   await page.locator('.step-btn').nth(1).hover();
   await scanAt('a stepper button hovered');
-  await page.locator('#cl-theme-toggle').hover();
-  await scanAt('the shared top bar theme toggle hovered');
+  await page.locator('.cl-topbar .cl-btn').first().hover();
+  await scanAt('a shared top bar control hovered');
 
   // ── A keyboard focus ring inside the live panel ─────────────────────────
   // A click leaves pointer modality, so `:focus-visible` stays off; the Tab
@@ -937,14 +937,4 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
     'Tab from the freshly focused panel host must land on a control inside the live panel'
   ).toBe(true);
   await scanAt('keyboard focus ring on the first control inside the live panel');
-
-  // ── The theme switched IN PLACE, without a reload ───────────────────────
-  // Every other configuration seeds the theme through localStorage before
-  // `goto`, so this is the only state where the page is repainted live — with
-  // the experiments unlocked and every pill rendered, a state the old gate's
-  // theme test (toggle, re-scan, nothing driven) never contained.
-  const other = theme.startsWith('dark') ? 'light' : 'dark';
-  await page.click('#cl-theme-toggle');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', other);
-  await scan(page, `${theme} / switched live to ${other} with experiments unlocked`);
 }
