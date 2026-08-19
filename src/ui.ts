@@ -692,7 +692,6 @@ function renderAppShell(data: DemoData, state: LabState): string {
   const atLastPanel = panelIndex === PANEL_LABELS.length - 1;
   return `
     <main id="main-content" class="app-shell" aria-label="X3DH Protocol Demo">
-      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode" hidden>🌙</button>
       <header class="cl-hero">
         <!-- role="note", not the aside's implicit "complementary": this hero
              lives INSIDE <main>, and a complementary landmark nested in another
@@ -734,40 +733,6 @@ function renderAppShell(data: DemoData, state: LabState): string {
   `;
 }
 
-// ── Theme toggle ─────────────────────────────────────────────────────────
-function updateThemeToggleUi(theme: "dark" | "light") {
-  const button = document.querySelector<HTMLButtonElement>("#theme-toggle");
-  if (!button) return;
-  if (theme === "dark") {
-    button.textContent = "🌙";
-    button.setAttribute("aria-label", "Switch to light mode");
-    return;
-  }
-  button.textContent = "☀️";
-  button.setAttribute("aria-label", "Switch to dark mode");
-}
-
-function applyTheme() {
-  const root = document.documentElement;
-  const stored = localStorage.getItem("theme");
-  const mode: "dark" | "light" = stored === "light" ? "light" : "dark";
-  root.dataset.theme = mode;
-  updateThemeToggleUi(mode);
-}
-
-function wireThemeToggle() {
-  const button = document.querySelector<HTMLButtonElement>("#theme-toggle");
-  if (!button) return;
-  updateThemeToggleUi(document.documentElement.dataset.theme === "light" ? "light" : "dark");
-  button.addEventListener("click", () => {
-    const root = document.documentElement;
-    const next: "dark" | "light" = root.dataset.theme === "dark" ? "light" : "dark";
-    root.dataset.theme = next;
-    localStorage.setItem("theme", next);
-    updateThemeToggleUi(next);
-  });
-}
-
 // ── Hex chip expand/collapse (delegated) ─────────────────────────────────
 function wireHexChips() {
   document.addEventListener("click", (event) => {
@@ -795,14 +760,11 @@ export async function renderDemo() {
     experimentsUnlocked: false
   };
 
-  applyTheme();
-
   // Rebuild the whole shell from freshly-computed, real crypto. Keeping this a
   // full re-render keeps the visualization and the actual bytes in lock-step.
   const rerender = async (focus: "panel" | "experiments" | "none") => {
     const data = await buildDemoState(state.scenario, state.seed);
     app.innerHTML = renderAppShell(data, state);
-    wireThemeToggle();
     if (focus === "panel") {
       document.querySelector<HTMLElement>("#panel-host")?.focus();
     } else if (focus === "experiments") {

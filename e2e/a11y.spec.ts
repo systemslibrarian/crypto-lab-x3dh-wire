@@ -25,10 +25,11 @@ import {
  * substituted-SPK rejection, the dropped-OPK crossing with three legs and the
  * omitted-DH4 card, and the corrupted-EK_A path with mismatched secrets, red
  * byte-diff cells and a failed decrypt; a full key regeneration asserted to
- * change the material; two hover states; a keyboard focus-visible ring inside
- * the live panel; and finally the theme switched live through the shared bar
- * with the experiments still unlocked. Every one of those states is scanned,
- * in both themes, at desktop and phone width.
+ * change the material; two hover states; and a keyboard focus-visible ring
+ * inside the live panel. Every one of those states is scanned, at desktop and
+ * phone width. There is one theme: the page pins dark before first paint and
+ * builds no control that could change it, so a second theme pass would scan
+ * the same rendering twice.
  *
  * See `gate.ts` for why nothing is injected into the page (the old spec's
  * `*{opacity:1!important}` style tag painted over the very states it claimed

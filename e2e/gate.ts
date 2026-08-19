@@ -332,13 +332,12 @@ export async function expectScrollersReachable(page: Page, label: string): Promi
  * DO remove an element from the tab order, so those are skipped rather than
  * flagged — the failure is specifically the invisible-but-tabbable pair.
  *
- * This page walks the line in three places, which is why the check earns its
+ * This page walks the line in two places, which is why the check earns its
  * keep: the glossary popovers rest at `opacity: 0` but pair it with
- * `visibility: hidden` (and hold no focusables); the lab's own theme toggle
- * ships in the DOM at `hidden` + `display: none` so its wiring keeps working;
- * and both skip links are the WCAG-sanctioned off-screen-but-focusable idiom,
- * deliberately not flagged — each has full opacity and a real box and slides
- * into view on focus, and the drive scans both focused.
+ * `visibility: hidden` (and hold no focusables); and both skip links are the
+ * WCAG-sanctioned off-screen-but-focusable idiom, deliberately not flagged —
+ * each has full opacity and a real box and slides into view on focus, and the
+ * drive scans both focused.
  */
 export async function expectNoInvisibleFocusTargets(page: Page, label: string): Promise<void> {
   const bad = await page.evaluate(() => {
@@ -599,15 +598,15 @@ export async function scan(page: Page, label: string): Promise<void> {
  * Panel 4 KM strip above all — see `expectNotBlank` for why a silently-failed
  * emulation would instead scan a mid-stagger rendering.
  *
- * The theme is seeded through `localStorage` rather than by clicking the
- * toggle, which pins down a real failure mode as a side effect: `index.html`'s
- * anti-flash script reads `localStorage.getItem('theme')`, the shared bar's
- * toggle writes `localStorage.setItem('theme', …)`, and this lab ALSO has
- * theme code of its own — `applyTheme()` in `ui.ts` re-reads the SAME key on
- * mount and re-stamps `data-theme` from it. All three agree on `'theme'`; if
- * any drifted, this boot fails on `data-theme` rather than quietly scanning
- * dark twice (the lab's own `applyTheme` would overwrite a seeded theme it
- * cannot read).
+ * Dark is the only theme, and there is no toggle left to click: the seeding
+ * through `localStorage` now pins down the OPPOSITE property. `index.html`'s
+ * head script OVERWRITES `localStorage['theme']` with the literal `'dark'` and
+ * stamps `data-theme` from that literal, so a page booted with `'light'`
+ * already stored must still resolve to dark — which is precisely the failure
+ * the fleet's toggle removal existed to prevent, since a stored `'light'`
+ * outlives the tab. `ui.ts` used to re-read the same key on mount and re-stamp
+ * `data-theme` from it; that code is gone, so the head literal is the only
+ * thing that decides the theme.
  *
  * The defaults are asserted at length because `ui.ts` builds the entire page
  * from one async `buildDemoState()` → `renderAppShell()` pass into an empty
@@ -649,22 +648,19 @@ export async function boot(page: Page, theme: 'dark' | 'light'): Promise<void> {
   await expect(page.locator('a.skip-link')).toHaveAttribute('href', '#main-content');
   await expect(page.locator('#app')).toHaveCount(1);
 
-  // ── The lab's own theme toggle is hidden, AND actually hidden ───────────
-  // `ui.ts` renders `#theme-toggle` with the `hidden` attribute and the shared
-  // bar's CSS also `display: none`s it, keeping it in the DOM so the lab's
-  // theme JS keeps working. Either mechanism alone is only correct if it
-  // genuinely removes the element: `opacity: 0` with `pointer-events: none`
-  // would leave a `<button>` tabbable and invisible. Measured from the live
-  // element by trying to focus it, rather than inferred from the CSS.
-  expect(
-    await page.evaluate(() => {
-      const t = document.getElementById('theme-toggle');
-      if (!t) return 'the lab theme toggle is missing entirely';
-      t.focus();
-      return document.activeElement === t ? 'it took focus while hidden' : 'ok';
-    }),
-    'the lab own theme toggle must be hidden in a way that also removes it from the tab order'
-  ).toBe('ok');
+  // ── No theme control is BUILT any more ──────────────────────────────────
+  // This used to assert the lab's own `#theme-toggle` was in the DOM and could
+  // not take focus. That measured invisibility while `ui.ts` still emitted the
+  // button on every render and still wired a click handler that flipped
+  // `data-theme` and wrote `localStorage['theme']` — a live control held off
+  // the page by one inline `display: none !important` rule in `index.html`,
+  // one specificity accident away from working. The markup and the handler are
+  // deleted, so assert ABSENCE: the stronger claim, and one a stylesheet edit
+  // cannot defeat. A returning toggle now fails here instead of hiding.
+  await expect(
+    page.locator('#theme-toggle, #themeToggle, .theme-toggle, [data-theme-toggle]'),
+    'no theme control may exist in the DOM'
+  ).toHaveCount(0);
 
   // ── Every shipped default ───────────────────────────────────────────────
   // Which half of this lab a scan sees depends entirely on these. The page
