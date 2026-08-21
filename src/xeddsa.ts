@@ -40,9 +40,9 @@
  * This is a teaching implementation: it is written for legibility against the
  * spec text above, not for constant-time execution or side-channel resistance.
  */
-import { ed25519, x25519 } from "@noble/curves/ed25519";
-import { bytesToNumberLE, numberToBytesLE } from "@noble/curves/utils";
-import { sha512 } from "@noble/hashes/sha2";
+import { ed25519, x25519 } from "@noble/curves/ed25519.js";
+import { bytesToNumberLE, numberToBytesLE } from "@noble/curves/utils.js";
+import { sha512 } from "@noble/hashes/sha2.js";
 
 const Point = ed25519.Point;
 /** Field of the curve coordinates, mod p = 2^255 - 19. */
@@ -187,5 +187,5 @@ export function xeddsaVerify(montgomeryPublic: Uint8Array, message: Uint8Array, 
 
 /** Convenience re-export so callers can generate the Curve25519 key this signs with. */
 export function randomMontgomerySecret(): Uint8Array {
-  return x25519.utils.randomPrivateKey();
+  return x25519.utils.randomSecretKey();
 }

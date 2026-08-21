@@ -1,5 +1,5 @@
-import { x25519 } from "@noble/curves/ed25519";
-import { numberToBytesLE } from "@noble/curves/utils";
+import { x25519 } from "@noble/curves/ed25519.js";
+import { numberToBytesLE } from "@noble/curves/utils.js";
 import { describe, expect, it } from "vitest";
 import {
   calculateKeyPair,
@@ -12,7 +12,7 @@ import {
 const P = 2n ** 255n - 19n;
 
 function secret(): Uint8Array {
-  return x25519.utils.randomPrivateKey();
+  return x25519.utils.randomSecretKey();
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
