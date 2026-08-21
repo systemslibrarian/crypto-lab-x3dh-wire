@@ -1,4 +1,4 @@
-import { x25519 } from "@noble/curves/ed25519";
+import { x25519 } from "@noble/curves/ed25519.js";
 import { concatDhWithDomainSeparator, hkdfSha256 } from "./kdf";
 import { xeddsaSign, xeddsaVerify } from "./xeddsa";
 
@@ -57,7 +57,7 @@ export type InitialMessage = {
 };
 
 function generateX25519KeyPair(): X25519KeyPair {
-  const privateKey = x25519.utils.randomPrivateKey();
+  const privateKey = x25519.utils.randomSecretKey();
   const publicKey = x25519.getPublicKey(privateKey);
   return { privateKey, publicKey };
 }
