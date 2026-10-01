@@ -1,7 +1,7 @@
 # crypto-lab-x3dh-wire
 
 [![GitHub Pages](https://img.shields.io/badge/demo-live-brightgreen)](https://systemslibrarian.github.io/crypto-lab-x3dh-wire/)
-[![CI](https://github.com/systemslibrarian/crypto-lab-x3dh-wire/actions/workflows/ci.yml/badge.svg)](https://github.com/systemslibrarian/crypto-lab-x3dh-wire/actions/workflows/ci.yml)
+[![CI](https://github.com/systemslibrarian/crypto-lab-x3dh-wire/actions/workflows/deploy.yml/badge.svg)](https://github.com/systemslibrarian/crypto-lab-x3dh-wire/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 ## What It Is
@@ -69,7 +69,7 @@ The cryptography is checked against known-answer test vectors and protocol invar
 - **Signed-prekey authentication**: valid bundles verify; tampered prekeys and tampered signatures are rejected; and a prekey signed by any *other* identity key is rejected — the signature is checked against the bundle's own IK_B, so there is no separate signing key an attacker could swap in alongside it.
 - **AES-GCM initial message**: round-trips under the derived key, and fails authentication under a wrong key or a tampered ciphertext.
 
-Every push and pull request runs typecheck plus the full suite via GitHub Actions (`.github/workflows/ci.yml`), and a deploy only ships after those pass.
+Every push and pull request runs typecheck plus the full suite via GitHub Actions (`.github/workflows/deploy.yml`), and a deploy only ships after those pass.
 
 ## Security Note
 
