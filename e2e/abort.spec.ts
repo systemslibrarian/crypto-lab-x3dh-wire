@@ -44,16 +44,17 @@ for (const width of [1366, 390]) {
 test('an older asynchronous accepted run cannot repaint after a newer signature abort', async ({ page }) => {
   await unlock(page);
   await page.evaluate(() => {
-    const derive = crypto.subtle.deriveBits;
+    // The inspected HKDF uses importKey + sign for HMAC, not deriveBits.
+    const importKey = crypto.subtle.importKey;
     const decrypt = crypto.subtle.decrypt;
     const pending: Array<() => void> = [];
     const control = { pending, done: false, release() {
-      crypto.subtle.deriveBits = derive;
+      crypto.subtle.importKey = importKey;
       pending.splice(0).forEach(run => run());
     } };
     Object.assign(window, { abortRace: control });
-    crypto.subtle.deriveBits = (...args) => new Promise((resolve, reject) => {
-      pending.push(() => derive.apply(crypto.subtle, args).then(resolve, reject));
+    crypto.subtle.importKey = (...args) => new Promise((resolve, reject) => {
+      pending.push(() => importKey.apply(crypto.subtle, args).then(resolve, reject));
     });
     crypto.subtle.decrypt = async (...args) => {
       try { return await decrypt.apply(crypto.subtle, args); }

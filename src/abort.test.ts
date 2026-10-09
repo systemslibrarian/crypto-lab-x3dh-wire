@@ -7,10 +7,14 @@ describe('X3DH signed-prekey rejection before downstream crypto (Signal §3.3)',
   for (const attack of ['tamperSpkSignature', 'substituteSpk'] as const) {
     for (const dropOpk of [false, true]) {
       it(`${attack}, OPK ${dropOpk ? 'absent' : 'present'}: no DH/KDF/session message`, async () => {
-        const derive = vi.spyOn(crypto.subtle, 'deriveBits');
+        const importKey = vi.spyOn(crypto.subtle, 'importKey');
+        const hmac = vi.spyOn(crypto.subtle, 'sign');
         const encrypt = vi.spyOn(crypto.subtle, 'encrypt');
         const demo = await buildDemoState({ ...DEFAULT_SCENARIO, [attack]: true, dropOpk });
         expect(demo.signatureOk).toBe(false);
+        expect(importKey).not.toHaveBeenCalled();
+        expect(hmac).not.toHaveBeenCalled();
+        expect(encrypt).not.toHaveBeenCalled();
         expect(demo.aliceDh).toBeNull();
         expect(demo.bobDh).toBeNull();
         expect(demo.aliceSk).toBeNull();
@@ -18,8 +22,6 @@ describe('X3DH signed-prekey rejection before downstream crypto (Signal §3.3)',
         expect(demo.initialMessage).toBeNull();
         expect(demo.decryptedByBob).toBeNull();
         expect(demo.matchingSecrets).toBeNull();
-        expect(derive).not.toHaveBeenCalled();
-        expect(encrypt).not.toHaveBeenCalled();
       });
     }
   }
