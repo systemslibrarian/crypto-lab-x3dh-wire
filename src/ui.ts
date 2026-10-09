@@ -11,6 +11,7 @@ import {
 } from "./x3dh";
 
 type DemoData = Awaited<ReturnType<typeof buildDemoState>>;
+type ProcessedDemoData = Extract<DemoData, { status: "processed" }>;
 
 // ── Hex helpers ──────────────────────────────────────────────────────────
 // A newcomer drowns in 64-char hex, so full values collapse to head…tail with
@@ -204,6 +205,14 @@ function renderControls(scenario: Scenario): string {
 
 // ── Status strip: live consequences ──────────────────────────────────────
 function renderStatus(data: DemoData): string {
+  if (data.status === "aborted") {
+    return `<div class="status-strip" role="status" aria-live="polite" aria-label="Live handshake status">
+      <span class="status-pill bad">✗ Signature INVALID</span>
+      <span class="status-pill bad">Handshake aborted</span>
+      <span class="status-pill bad">SK not derived</span>
+      <span class="status-pill bad">Message not sent</span>
+    </div>`;
+  }
   const sig = data.signatureOk;
   const match = data.matchingSecrets;
   const decrypted = data.decryptedByBob !== null;
@@ -397,7 +406,7 @@ function renderCrossing(withOpk: boolean, view: DhView): string {
 // private × Alice's EK_A public), then reveal that the two 32-byte outputs are
 // byte-for-byte identical. The bytes come straight from the live DH sets — if
 // they ever differed, the highlight would show it honestly.
-function renderCommutativity(data: DemoData): string {
+function renderCommutativity(data: ProcessedDemoData): string {
   const aliceOut = data.aliceDh.dh2; // DH(EK_A_priv, IK_B_pub)
   const bobOut = data.bobDh.dh2; // DH(IK_B_priv, EK_A_pub)
   const aliceHex = bytesToHex(aliceOut);
@@ -441,7 +450,7 @@ function equalBytesHex(a: string, b: string): boolean {
   return a.length === b.length && a === b;
 }
 
-function renderPanel3(data: DemoData, view: DhView): string {
+function renderPanel3(data: ProcessedDemoData, view: DhView): string {
   const rows: { n: 1 | 2 | 3 | 4; formA: string; formB: string; why: string; threat: string; dh: Uint8Array | null }[] = [
     { n: 1, formA: "DH(IK_A, SPK_B)", formB: "DH(SPK_B, IK_A)", why: "mutual authentication via Bob's signed prekey", threat: "Uses Alice's long-term identity IK_A against Bob's signed prekey. An attacker without Alice's IK_A private key cannot produce this term, so it authenticates the initiator to Bob. The other direction — Bob to Alice — rests entirely on the SPK signature: SPK_B counts as Bob's only because it is signed under IK_B, and IK_B counts as Bob's only because it was verified out of band. Break either link and DH1 authenticates Alice to a stranger.", dh: data.aliceDh.dh1 },
     { n: 2, formA: "DH(EK_A, IK_B)", formB: "DH(IK_B, EK_A)", why: "binds Alice's ephemeral to Bob's long-term identity", threat: "Mixes Alice's fresh ephemeral with Bob's long-term IK_B, so the session is bound to Bob's identity — a stranger who is not Bob cannot reconstruct it.", dh: data.aliceDh.dh2 },
@@ -526,7 +535,7 @@ function renderConvergence(legs: Leg[], skHex: string): string {
 }
 
 // ── Panel 4: Convergence into HKDF ───────────────────────────────────────
-function renderPanel4(data: DemoData): string {
+function renderPanel4(data: ProcessedDemoData): string {
   const legs: (1 | 2 | 3 | 4)[] = data.withOpk ? [1, 2, 3, 4] : [1, 2, 3];
   const aliceHex = bytesToHex(data.aliceSk);
   const bobHex = bytesToHex(data.bobSk);
@@ -580,7 +589,7 @@ function renderPanel4(data: DemoData): string {
 }
 
 // ── Panel 5: Handoff ─────────────────────────────────────────────────────
-function renderPanel5(data: DemoData): string {
+function renderPanel5(data: ProcessedDemoData): string {
   const ok = data.decryptedByBob !== null;
   return `
     <section class="panel-card">
@@ -634,6 +643,17 @@ type LabState = {
 };
 
 function renderPanel(data: DemoData, state: LabState): string {
+  if (data.status === "aborted") {
+    return `${renderPanel1(data)}
+      <section class="panel-card" aria-labelledby="abort-heading">
+        <h2 id="abort-heading">Handshake aborted</h2>
+        <p>Alice rejected the signed-prekey signature before any DH computation,
+        key derivation or initial message. No session key or ciphertext was produced.</p>
+        <p><a href="https://signal.org/docs/specifications/x3dh/#sending-the-initial-message"
+          target="_blank" rel="noreferrer">Signal X3DH §3.3 requires this abort</a>.
+        Turn off the invalid-signature experiment to try a valid bundle.</p>
+      </section>`;
+  }
   switch (state.panelIndex) {
     case 0:
       return renderPanel1(data);
@@ -714,7 +734,7 @@ function renderAppShell(data: DemoData, state: LabState): string {
       <nav class="stepper" aria-label="Protocol step selector">
         ${PANEL_LABELS.map((label, idx) => {
           const current = idx === panelIndex;
-          return `<button class="step-btn ${current ? "active" : ""}" data-step="${idx}" aria-label="Panel ${idx + 1}: ${label}" aria-current="${current ? "step" : "false"}">Panel ${idx + 1}</button>`;
+          return `<button class="step-btn ${current ? "active" : ""}" data-step="${idx}" aria-label="Panel ${idx + 1}: ${label}" aria-current="${current ? "step" : "false"}" ${data.status === "aborted" && idx > 0 ? "disabled" : ""}>Panel ${idx + 1}</button>`;
         }).join("")}
       </nav>
 
@@ -722,7 +742,7 @@ function renderAppShell(data: DemoData, state: LabState): string {
 
       <div class="walkthrough-controls" role="group" aria-label="Panel navigation">
         <button id="prev-panel" type="button" aria-label="Previous panel" ${panelIndex === 0 ? "disabled" : ""}>Previous</button>
-        <button id="next-panel" type="button" aria-label="Next panel" ${atLastPanel ? "disabled" : ""}>Next</button>
+        <button id="next-panel" type="button" aria-label="Next panel" ${atLastPanel || data.status === "aborted" ? "disabled" : ""}>Next</button>
       </div>
 
       ${renderExperimentGate(state, atLastPanel)}
@@ -762,8 +782,16 @@ export async function renderDemo() {
 
   // Rebuild the whole shell from freshly-computed, real crypto. Keeping this a
   // full re-render keeps the visualization and the actual bytes in lock-step.
+  let renderGeneration = 0;
+  let aborted = false;
   const rerender = async (focus: "panel" | "experiments" | "none") => {
+    const generation = ++renderGeneration;
     const data = await buildDemoState(state.scenario, state.seed);
+    // An older asynchronous valid run cannot repaint accepted outputs after
+    // a newer signed-prekey rejection (or other scenario change).
+    if (generation !== renderGeneration) return;
+    aborted = data.status === "aborted";
+    if (aborted) state.panelIndex = 0;
     app.innerHTML = renderAppShell(data, state);
     if (focus === "panel") {
       document.querySelector<HTMLElement>("#panel-host")?.focus();
@@ -786,6 +814,7 @@ export async function renderDemo() {
 
     const stepBtn = el.closest<HTMLButtonElement>(".step-btn");
     if (stepBtn) {
+      if (stepBtn.disabled || aborted && stepBtn.dataset.step !== "0") return;
       state.panelIndex = Number(stepBtn.dataset.step ?? "0");
       await rerender("panel");
       return;
@@ -796,6 +825,7 @@ export async function renderDemo() {
       return;
     }
     if (el.closest("#next-panel")) {
+      if (aborted) return;
       state.panelIndex = Math.min(PANEL_LABELS.length - 1, state.panelIndex + 1);
       await rerender("panel");
       return;
@@ -831,6 +861,7 @@ export async function renderDemo() {
   app.addEventListener("keydown", async (event) => {
     const target = event.target as HTMLElement;
     if (!target.closest(".stepper")) return;
+    if (aborted) return;
     const last = PANEL_LABELS.length - 1;
     let next = state.panelIndex;
     if (event.key === "ArrowRight" || event.key === "ArrowDown") next = Math.min(last, state.panelIndex + 1);

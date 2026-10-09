@@ -862,6 +862,10 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expectPill(page, 'Signature INVALID', 'bad');
   await gotoPanel(page, 0, /Panel 1/);
   await expect(page.locator('#panel-host .verdict--bad')).toContainText('INVALID — tampered');
+  await expect(page.locator('#abort-heading')).toHaveText('Handshake aborted');
+  await expectPill(page, 'SK not derived', 'bad');
+  await expectPill(page, 'Message not sent', 'bad');
+  await expect(page.locator('#next-panel')).toBeDisabled();
   await scanAt('SPK signature tampered — Panel 1 verdict INVALID, signature pill red');
   await setToggle(page, 'tamperSpkSignature', false);
   await expectPill(page, 'Signature valid', 'ok');
@@ -871,6 +875,9 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#panel-host .verdict--bad')).toContainText(
     'INVALID — SPK_B is not signed by this IK_B'
   );
+  await expect(page.locator('#abort-heading')).toHaveText('Handshake aborted');
+  await expectPill(page, 'SK not derived', 'bad');
+  await expectPill(page, 'Message not sent', 'bad');
   await scanAt('relay-substituted SPK — rejected against IK_B, the substitution wording');
   await setToggle(page, 'substituteSpk', false);
   await expect(page.locator('#panel-host .verdict--ok')).toHaveText('valid');

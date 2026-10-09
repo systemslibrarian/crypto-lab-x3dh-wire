@@ -24,6 +24,7 @@ The lab is a guided walkthrough first: it opens with a "who holds what" orientat
 
 ## What Can Go Wrong
 
+- A failed signed-prekey signature aborts before DH, key derivation or initial-message encryption, as required by [X3DH §3.3](https://signal.org/docs/specifications/x3dh/#sending-the-initial-message). The tamper and relay-substitution controls show this rejected outcome and disable downstream panels; they do not establish a session while ignoring verification.
 - Without one-time prekeys, the handshake loses some of its forward-secrecy strength against an attacker who later compromises the recipient's keys.
 - X3DH alone provides no protection for ongoing messages or replay handling; it must hand off to a post-handshake ratchet (e.g. Double Ratchet) for continued security.
 - A compromised or unrotated signed prekey weakens authentication of the session setup; prekeys must be rotated and exhausted one-time prekeys replenished.
@@ -84,3 +85,10 @@ Released under the [MIT License](./LICENSE).
 *Part of the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
 
 *"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
+
+## Publishing requests
+
+`npm run deploy` requests the existing `deploy.yml` workflow at `main`.
+The workflow retains its full type, unit, build and browser gates. A successful
+request is not evidence of publication; inspect the run and actual public site.
+Failed requests retain their nonzero exit status.

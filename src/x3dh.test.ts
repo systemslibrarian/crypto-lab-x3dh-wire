@@ -91,6 +91,18 @@ describe("SPK signature authentication", () => {
 });
 
 describe("X3DH agreement symmetry", () => {
+  it("raw DH arithmetic is independent of signature bytes, while the protocol still requires verification", () => {
+    const bob = createBobState();
+    const alice = createAliceState();
+    const invalidBundle = { ...bob.bundle, spkSignature: Uint8Array.from(bob.bundle.spkSignature) };
+    invalidBundle.spkSignature[0] ^= 0xff;
+    expect(verifySpkSignature(invalidBundle)).toBe(false);
+    const rawAlice = computeAliceDhSet(alice, invalidBundle);
+    const rawBob = computeBobDhSet(bob, alice.ikA.publicKey, alice.ekA.publicKey);
+    for (const leg of ['dh1', 'dh2', 'dh3', 'dh4'] as const) {
+      expect(equalBytes(rawAlice[leg], rawBob[leg])).toBe(true);
+    }
+  });
   it("Alice and Bob derive the same DH set and shared secret", async () => {
     const bob = createBobState();
     const alice = createAliceState();
@@ -178,11 +190,13 @@ describe("buildDemoState (full end-to-end flow)", () => {
     expect(demo.decryptedByBob).toBe(demo.firstPlaintext);
   });
 
-  it("scenario: tampering the SPK signature flips verification to invalid but the secret still forms", async () => {
+  it("scenario: tampering the SPK signature aborts before a secret forms", async () => {
     const demo = await buildDemoState({ ...DEFAULT_SCENARIO, tamperSpkSignature: true });
     expect(demo.signatureOk).toBe(false);
-    // The DH agreement does not depend on the signature, so SK still matches.
-    expect(demo.matchingSecrets).toBe(true);
+    expect(demo.status).toBe("aborted");
+    expect(demo.aliceSk).toBeNull();
+    expect(demo.initialMessage).toBeNull();
+    expect(demo.matchingSecrets).toBeNull();
   });
 
   it("scenario: a relay swapping in its own signed prekey is caught by the IK_B check", async () => {
@@ -190,14 +204,18 @@ describe("buildDemoState (full end-to-end flow)", () => {
     expect(demo.spkSubstituted).toBe(true);
     // The attacker's signature is internally valid but not under Bob's IK_B.
     expect(demo.signatureOk).toBe(false);
-    // Alice ran DH1/DH3 against the attacker's prekey, so the secrets diverge.
-    expect(demo.matchingSecrets).toBe(false);
+    // The identity check rejects before Alice runs DH against the attacker's prekey.
+    expect(demo.status).toBe("aborted");
+    expect(demo.matchingSecrets).toBeNull();
+    expect(demo.aliceDh).toBeNull();
+    expect(demo.initialMessage).toBeNull();
     expect(demo.decryptedByBob).toBeNull();
   });
 
   it("scenario: dropping the OPK still yields matching secrets (weaker forward secrecy, not broken)", async () => {
     const demo = await buildDemoState({ ...DEFAULT_SCENARIO, dropOpk: true });
     expect(demo.withOpk).toBe(false);
+    if (demo.status !== "processed") throw new Error("Valid signature unexpectedly rejected");
     expect(demo.aliceDh.dh4).toBeNull();
     expect(demo.matchingSecrets).toBe(true);
     expect(demo.decryptedByBob).toBe(demo.firstPlaintext);
