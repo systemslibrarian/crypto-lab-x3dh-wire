@@ -256,6 +256,19 @@ export async function buildDemoState(
 
   const withOpk = !scenario.dropOpk;
 
+  // Signal X3DH §3.3: a failed prekey signature aborts before DH, KDF or
+  // initial-message encryption. Null means not attempted, never a fake key.
+  if (!signatureOk) {
+    return {
+      status: "aborted" as const,
+      scenario, bob, alice, bundle, withOpk, signatureOk,
+      spkSubstituted: attacker !== null,
+      aliceDh: null, bobDh: null, aliceSk: null, bobSk: null,
+      matchingSecrets: null, initialMessage: null,
+      firstPlaintext: null, decryptedByBob: null
+    };
+  }
+
   // (d) Corrupt one byte of the EK_A public that travels to Bob. Alice still
   // computes her DH set with her REAL private/public pair, but the header Bob
   // receives is corrupted, so Bob's DH2/DH3/DH4 diverge and SK no longer matches.
@@ -293,6 +306,7 @@ export async function buildDemoState(
   };
 
   return {
+    status: "processed" as const,
     scenario,
     bob,
     alice,

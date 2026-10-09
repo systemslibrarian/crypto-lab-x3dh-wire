@@ -24,6 +24,7 @@ The lab is a guided walkthrough first: it opens with a "who holds what" orientat
 
 ## What Can Go Wrong
 
+- A failed signed-prekey signature aborts before DH, key derivation or initial-message encryption, as required by [X3DH §3.3](https://signal.org/docs/specifications/x3dh/#sending-the-initial-message). The tamper and relay-substitution controls show this rejected outcome and disable downstream panels; they do not establish a session while ignoring verification.
 - Without one-time prekeys, the handshake loses some of its forward-secrecy strength against an attacker who later compromises the recipient's keys.
 - X3DH alone provides no protection for ongoing messages or replay handling; it must hand off to a post-handshake ratchet (e.g. Double Ratchet) for continued security.
 - A compromised or unrotated signed prekey weakens authentication of the session setup; prekeys must be rotated and exhausted one-time prekeys replenished.
