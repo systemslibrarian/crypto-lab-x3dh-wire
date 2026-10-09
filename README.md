@@ -85,3 +85,10 @@ Released under the [MIT License](./LICENSE).
 *Part of the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
 
 *"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
+
+## Publishing requests
+
+`npm run deploy` requests the existing `deploy.yml` workflow at `main`.
+The workflow retains its full type, unit, build and browser gates. A successful
+request is not evidence of publication; inspect the run and actual public site.
+Failed requests retain their nonzero exit status.
