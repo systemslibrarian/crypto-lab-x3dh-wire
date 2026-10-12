@@ -34,10 +34,9 @@ The lab is a guided walkthrough first: it opens with a "who holds what" orientat
 
 ## Real-World Usage
 
-- The Signal Protocol uses X3DH to bootstrap sessions before the Double Ratchet takes over.
-- WhatsApp's end-to-end encryption is built on the Signal Protocol, including its X3DH-style handshake.
-- Google Messages RCS end-to-end encryption uses the Signal Protocol for key agreement.
-- Other messaging systems adopting the Signal Protocol (such as Session and Signal-based forks) rely on the same asynchronous-handshake design.
+X3DH is the classical asynchronous-handshake foundation taught here. Signal announced [PQXDH on September 19, 2023](https://signal.org/blog/pqxdh/) for post-quantum setup protection and [SPQR / Triple Ratchet on October 2, 2025](https://signal.org/blog/spqr/) for continuing post-quantum ratcheting. Announcement dates are not universal migration dates for all sessions or other adopters.
+
+Related lessons: [PQXDH Wire](https://systemslibrarian.github.io/crypto-lab-pqxdh-wire/) and [Ratchet Wire](https://systemslibrarian.github.io/crypto-lab-ratchet-wire/). Ratchet Wire’s ML-KEM setup plus classical Double Ratchet is not an SPQR implementation.
 
 ## How to Run Locally
 
