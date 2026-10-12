@@ -723,11 +723,11 @@ function renderAppShell(data: DemoData, state: LabState): string {
         </div>
         <aside class="cl-hero-why" role="note" aria-label="Why it matters">
           <span class="cl-hero-why-label">WHY IT MATTERS</span>
-          <p class="cl-hero-why-text">Secure messengers must let people start a conversation without both parties being online at once. X3DH is the handshake Signal and WhatsApp use to make that first message private, and its forward secrecy limits the damage if a key is later stolen.</p>
+          <p class="cl-hero-why-text">Secure messengers must let people start a conversation without both parties being online at once. X3DH is the classical foundation of Signal’s asynchronous session setup, and its forward secrecy limits the damage if a key is later stolen.</p>
         </aside>
       </header>
 
-      <p class="guide-lead">Follow the five panels in order — each shows the real bytes at that step. Bob is offline until the last beat; watch Alice derive a shared secret he can later reconstruct.</p>
+      <p class="guide-lead">Historical scope: Signal announced <a href="https://signal.org/blog/pqxdh/">PQXDH on September 19, 2023</a> for session setup, then <a href="https://signal.org/blog/spqr/">SPQR / Triple Ratchet on October 2, 2025</a> for continuing post-quantum ratcheting. This is the classical X3DH lesson. Explore <a href="https://systemslibrarian.github.io/crypto-lab-pqxdh-wire/">PQXDH Wire</a> and <a href="https://systemslibrarian.github.io/crypto-lab-ratchet-wire/">Ratchet Wire</a>; the latter’s ML-KEM setup plus classical Double Ratchet is not SPQR. Announcement dates do not imply every session or adopter switched that day.</p><p class="guide-lead">Follow the five panels in order — each shows the real bytes at that step. Bob is offline until the last beat; watch Alice derive a shared secret he can later reconstruct.</p>
 
       ${renderHoldsWhat(data)}
 

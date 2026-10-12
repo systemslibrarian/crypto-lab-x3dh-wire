@@ -1123,3 +1123,11 @@ footer a {
 /* ── Verdict code coloring ── */
 .verdict--ok { color: var(--ok-ink); }
 .verdict--bad { color: var(--bad-ink); font-weight: 700; }
+
+/* Research-history links remain legible over the responsive tinted background. */
+.guide-lead a,
+.guide-lead a:visited {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
