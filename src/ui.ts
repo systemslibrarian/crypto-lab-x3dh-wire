@@ -51,7 +51,7 @@ const GLOSSARY: Record<string, string> = {
   prekey:
     "A key Bob uploads to the server AHEAD of time so Alice can start a session while Bob is offline.",
   "signed prekey":
-    "A medium-term prekey (SPK) that Bob signs with his identity key so Alice knows it is really Bob's.",
+    "A medium-term prekey (SPK) signed under the bundle's identity key. Alice must independently verify that identity key belongs to Bob; a valid signature alone does not prove it.",
   "ephemeral key":
     "A single-use key (EK_A) Alice generates fresh for this one handshake and then throws away — the source of forward secrecy.",
   opk:
@@ -131,9 +131,10 @@ function renderHoldsWhat(data: DemoData): string {
       <h2 id="holds-heading">Who holds what</h2>
       <p class="holds-lead">
         Alice combines <strong>her own private keys</strong> with the
-        <strong>public bundle</strong> Bob left on the server. Bob later combines
+        <strong>public bundle</strong> fetched from the server. Bob later combines
         <strong>his private keys</strong> with the <strong>public keys</strong> Alice
-        sent — different material on each side, but the maths converge on one secret.
+        sent — different material on each side, converging on one secret only when the offered keys are Bob's.
+        ${data.scenario.substituteBundle ? "Here the server substituted an attacker's complete bundle: Alice's DH values meet the attacker's, not Bob's." : ""}
       </p>
       <div class="holds-grid">
         <div class="holds-box holds-box--alice">
@@ -196,6 +197,7 @@ function renderControls(scenario: Scenario): string {
         <button type="button" class="lab-regen" id="lab-regenerate" aria-label="Regenerate all keys and re-run the handshake">↻ Regenerate all keys</button>
         ${toggle("tamperSpkSignature", scenario.tamperSpkSignature, "Tamper SPK signature", "flip a byte → XEdDSA verify fails")}
         ${toggle("substituteSpk", scenario.substituteSpk, "Relay swaps SPK_B", "attacker's prekey, signed by the attacker → rejected by IK_B")}
+        ${toggle("substituteBundle", scenario.substituteBundle, "Replace whole bundle", "signature still valid; trusted Bob fingerprint differs")}
         ${toggle("dropOpk", scenario.dropOpk, "Drop one-time prekey", "omit DH4 → weaker forward secrecy, SK still forms")}
         ${toggle("corruptEkA", scenario.corruptEkA, "Corrupt EK_A byte on wire", "flip a byte → Bob's SK diverges, decrypt fails")}
       </div>
@@ -221,9 +223,11 @@ function renderStatus(data: DemoData): string {
   return `
     <div class="status-strip" role="status" aria-live="polite" aria-label="Live handshake status">
       ${pill(sig, "Signature valid", "Signature INVALID")}
+      ${pill(data.identityMatchesPin, "Trusted Bob key matches", "Trusted Bob key MISMATCH")}
       ${pill(data.withOpk, "OPK present (DH4)", "OPK dropped (no DH4)")}
       ${pill(match, "Alice SK = Bob SK", "SK MISMATCH")}
       ${pill(decrypted, "Bob decrypted", "Decrypt FAILED")}
+      ${data.scenario.substituteBundle ? pill(data.decryptedByAttacker !== null, "Attacker decrypted", "Attacker decrypt failed") : ""}
     </div>
   `;
 }
@@ -232,12 +236,12 @@ function renderStatus(data: DemoData): string {
 function renderPanel1(data: DemoData): string {
   return `
     <section class="panel-card">
-      <h2>Panel 1: Key Registry — Bob's prekey bundle</h2>
+      <h2>Panel 1: Key Registry — offered prekey bundle</h2>
       ${renderPrimitiveChips()}
       ${renderTimeline(0)}
       <p>
         Bob publishes a ${term("prekey", "prekey")} bundle to the server, then can go offline.
-        Alice fetches it and begins a secure session <em>asynchronously</em> — the whole point of X3DH.
+        Alice fetches an offered bundle and begins a session <em>asynchronously</em> — the whole point of X3DH.
       </p>
       <div class="kv-grid">
         ${kvRow("IK_B public (X25519)", hexChip(data.bundle.ikBPub, "pub", false, "IK_B public"))}
@@ -246,9 +250,12 @@ function renderPanel1(data: DemoData): string {
         ${kvRow("SPK signature — Sig(IK_B, SPK_B)", hexChip(data.bundle.spkSignature, "bob", false, "SPK signature"))}
         ${kvRow("Verified against", `<code class="inline-code">IK_B public — no separate signing key</code>`)}
         ${kvRow("Signature verification", `<code class="verdict ${data.signatureOk ? "verdict--ok" : "verdict--bad"}">${data.signatureOk ? "valid" : data.spkSubstituted ? "INVALID — SPK_B is not signed by this IK_B" : "INVALID — tampered"}</code>`)}
+        ${kvRow("Trusted Bob fingerprint (SHA-256 of IK_B)", `<code class="inline-code">${bytesToHex(data.pinnedFingerprint)}</code>`)}
+        ${kvRow("Offered bundle fingerprint", `<code class="inline-code">${bytesToHex(data.offeredFingerprint)}</code>`)}
+        ${kvRow("Compare with trusted pin", `<code class="verdict ${data.identityMatchesPin ? "verdict--ok" : "verdict--bad"}">${data.identityMatchesPin ? "match" : "MISMATCH — abort if pin is enforced"}</code>`)}
       </div>
       <p class="small-note">
-        SPK_B is signed with Bob's <em>identity</em> secret using ${term("XEdDSA", "xeddsa")}, exactly as
+        SPK_B is signed with the offered bundle's <em>identity</em> secret using ${term("XEdDSA", "xeddsa")}, exactly as
         <a href="https://signal.org/docs/specifications/x3dh/#keys" target="_blank" rel="noreferrer">X3DH §2.1</a> specifies
         (<code class="inline-code">Sig(IK_B, Encode(SPK_B))</code>). XEdDSA lets one X25519 key both do Diffie-Hellman
         and sign, so the verifier re-derives the signing public key from <code class="inline-code">IK_B</code> by the
@@ -261,6 +268,14 @@ function renderPanel1(data: DemoData): string {
         one that is internally consistent and verifies. Real deployments close that gap out of band, by having users
         compare identity-key fingerprints (Signal's safety numbers).
       </p>
+      <p class="small-note small-note--caution">
+        <strong>Trusted-reference teaching view:</strong> the lab knows Bob's real identity key independently and compares
+        complete SHA-256 fingerprints. Real people must establish the reference through an authenticated channel;
+        this is not Signal's safety-number encoding or a short-authentication-string probability experiment.
+        ${data.scenario.substituteBundle ? "The valid-signature attack run below deliberately follows the unpinned path to show what a pin check would stop." : ""}
+        See <a href="https://signal.org/docs/specifications/x3dh/#authentication" target="_blank" rel="noreferrer">X3DH §4.1</a>
+        and <a href="https://signal.org/docs/specifications/x3dh/#identity-binding" target="_blank" rel="noreferrer">§4.8</a>.
+      </p>
     </section>
   `;
 }
@@ -272,7 +287,7 @@ function renderPanel2(data: DemoData): string {
       <h2>Panel 2: Alice Initiates</h2>
       ${renderPrimitiveChips()}
       ${renderTimeline(1)}
-      <p>Alice generates her identity key IK_A and a fresh ${term("ephemeral key", "ephemeral key")} EK_A, then fetches Bob's bundle. Bob is still offline.</p>
+      <p>Alice generates her identity key IK_A and a fresh ${term("ephemeral key", "ephemeral key")} EK_A, then fetches the offered bundle. Bob is still offline. ${data.scenario.substituteBundle ? "This offered bundle belongs to an attacker, even though its signed prekey verifies against its own identity key." : ""}</p>
       <div class="kv-grid">
         ${kvRow("IK_A public", hexChip(data.alice.ikA.publicKey, "alice", false, "IK_A public"))}
         ${kvRow("EK_A public", hexChip(data.alice.ekA.publicKey, "alice", false, "EK_A public"))}
@@ -414,11 +429,11 @@ function renderCommutativity(data: ProcessedDemoData): string {
   const identical = equalBytesHex(aliceHex, bobHex);
   return `
     <div class="commute" role="group" aria-labelledby="commute-heading">
-      <h3 id="commute-heading" class="commute-h">Why do two different computations agree?</h3>
+      <h3 id="commute-heading" class="commute-h">When do two different computations agree?</h3>
       <p class="commute-lead">
-        Take one pair — <b>DH2</b>. Alice never sees Bob's private key and Bob
-        never sees Alice's, yet they feed <em>opposite</em> inputs into X25519 and
-        get the <em>same</em> 32 bytes. That is the whole trick:
+        Take one pair — <b>DH2</b>. With matching peer keys, Alice and Bob feed
+        <em>opposite</em> inputs into X25519 and get the same 32 bytes. If Alice
+        accepted another identity key, that premise is false. The arithmetic is:
         <code class="inline-code">DH(a, B) = DH(b, A)</code> because both equal
         <code class="inline-code">g<sup>ab</sup> = g<sup>ba</sup></code>.
       </p>
@@ -452,17 +467,17 @@ function equalBytesHex(a: string, b: string): boolean {
 
 function renderPanel3(data: ProcessedDemoData, view: DhView): string {
   const rows: { n: 1 | 2 | 3 | 4; formA: string; formB: string; why: string; threat: string; dh: Uint8Array | null }[] = [
-    { n: 1, formA: "DH(IK_A, SPK_B)", formB: "DH(SPK_B, IK_A)", why: "mutual authentication via Bob's signed prekey", threat: "Uses Alice's long-term identity IK_A against Bob's signed prekey. An attacker without Alice's IK_A private key cannot produce this term, so it authenticates the initiator to Bob. The other direction — Bob to Alice — rests entirely on the SPK signature: SPK_B counts as Bob's only because it is signed under IK_B, and IK_B counts as Bob's only because it was verified out of band. Break either link and DH1 authenticates Alice to a stranger.", dh: data.aliceDh.dh1 },
-    { n: 2, formA: "DH(EK_A, IK_B)", formB: "DH(IK_B, EK_A)", why: "binds Alice's ephemeral to Bob's long-term identity", threat: "Mixes Alice's fresh ephemeral with Bob's long-term IK_B, so the session is bound to Bob's identity — a stranger who is not Bob cannot reconstruct it.", dh: data.aliceDh.dh2 },
+    { n: 1, formA: "DH(IK_A, SPK_B)", formB: "DH(SPK_B, IK_A)", why: "authentication depends on the offered identity key", threat: "Alice's long-term identity IK_A contributes to DH1 with the offered signed prekey. The SPK signature binds that prekey to the offered IK_B, but Alice only knows IK_B belongs to Bob after an authenticated comparison. A self-consistent attacker bundle passes signature verification and redirects the exchange to its owner.", dh: data.aliceDh.dh1 },
+    { n: 2, formA: "DH(EK_A, IK_B)", formB: "DH(IK_B, EK_A)", why: "binds Alice's ephemeral to the offered identity key", threat: "Alice's fresh ephemeral is mixed with the identity key in the offered bundle. It belongs to Bob only if that key was independently authenticated. Under whole-bundle substitution the attacker holds its private half and Bob does not.", dh: data.aliceDh.dh2 },
     { n: 3, formA: "DH(EK_A, SPK_B)", formB: "DH(SPK_B, EK_A)", why: "fresh ephemeral contribution toward forward secrecy", threat: "Alice's single-use ephemeral against Bob's rotated signed prekey. Because EK_A is discarded after the handshake, a later theft of long-term keys cannot recompute this term.", dh: data.aliceDh.dh3 },
     { n: 4, formA: "DH(EK_A, OPK_B)", formB: "DH(OPK_B, EK_A)", why: "one-time prekey component adding one-time forward secrecy", threat: "Alice's ephemeral against a prekey Bob deletes after one use. Once consumed, neither side can regenerate it, giving even the first message its own forward secrecy.", dh: data.aliceDh.dh4 }
   ];
   const visible = data.withOpk ? rows : rows.slice(0, 3);
   return `
     <section class="panel-card">
-      <h2>Panel 3: Four DH Operations</h2>
+      <h2>Panel 3: ${data.withOpk ? "Four" : "Three"} DH Operations</h2>
       ${renderPrimitiveChips()}
-      <p>Four X25519 Diffie-Hellmans cross between the two sides. Each line below runs from the real private key one side holds to the real public key the other published. Toggle the viewpoint and watch each numbered line <em>re-anchor</em> to the mirrored keys — same colour, same pairing, opposite owners.</p>
+      <p>${data.withOpk ? "Four" : "Three"} X25519 Diffie-Hellman terms are computed from the two sides' keys. Each line below runs from the real private key one side holds to the offered public key. Toggle the viewpoint to compare Bob's actual private keys with Alice's offered bundle. ${data.scenario.substituteBundle ? "The lines no longer mirror one key pair: the attacker owns the offered keys." : "With the honest bundle, the same pair meets on both sides."}</p>
       <div class="view-toggle" role="group" aria-label="Diagram viewpoint">
         <button type="button" class="view-btn ${view === "alice" ? "active" : ""}" data-view="alice" aria-pressed="${view === "alice"}">Alice's view</button>
         <button type="button" class="view-btn ${view === "bob" ? "active" : ""}" data-view="bob" aria-pressed="${view === "bob"}">Bob's view</button>
@@ -581,6 +596,7 @@ function renderPanel4(data: ProcessedDemoData): string {
         </div>
       </div>
       ${diff}
+      ${data.scenario.substituteBundle ? `<p class="small-note small-note--caution">Alice and the attacker's derived secrets match: <strong>${data.attackerSk !== null && bytesToHex(data.attackerSk) === aliceHex ? "yes" : "no"}</strong>. Bob's differs. A trusted identity pin would have stopped Alice before this unpinned teaching continuation.</p>` : ""}
       <p class="small-note">
         Signal X3DH specification: <a href="https://signal.org/docs/specifications/x3dh/" target="_blank" rel="noreferrer">signal.org/docs/specifications/x3dh</a>
       </p>
@@ -597,7 +613,7 @@ function renderPanel5(data: ProcessedDemoData): string {
       ${renderPrimitiveChips()}
       <p>
         Alice's initial message carries EK_A pubkey, IK_A pubkey, the selected OPK id, and ciphertext.
-        Bob reconstructs SK from his side and decrypts.
+        Bob reconstructs SK from his side and decrypts when the offered bundle is his.
       </p>
       <div class="kv-grid">
         ${kvRow("Header: EK_A public", hexChip(data.initialMessage.ekAPub, "alice", false, "EK_A on wire"))}
@@ -606,6 +622,7 @@ function renderPanel5(data: ProcessedDemoData): string {
         ${kvRow("AES-GCM IV", hexChip(data.initialMessage.iv, "pub", false, "AES-GCM IV"))}
         ${kvRow("First encrypted message", hexChip(data.initialMessage.ciphertext, "pub", false, "Ciphertext"))}
         ${kvRow("Bob decrypts", `<code class="verdict ${ok ? "verdict--ok" : "verdict--bad"}">${ok ? data.decryptedByBob : "✗ authentication failed — key mismatch"}</code>`)}
+        ${data.scenario.substituteBundle ? kvRow("Attacker decrypts (unpinned path)", `<code class="verdict ${data.decryptedByAttacker !== null ? "verdict--bad" : "verdict--ok"}">${data.decryptedByAttacker ?? "✗ authentication failed"}</code>`) : ""}
       </div>
       <p class="small-note small-note--caution">
         <strong>Documented omission: no associated data.</strong> Real X3DH computes
@@ -632,7 +649,7 @@ const PANEL_LABELS = [
 // ── App-level render state ───────────────────────────────────────────────
 type LabState = {
   scenario: Scenario;
-  seed: { bob: BobState; alice: AliceState };
+  seed: { bob: BobState; alice: AliceState; attacker: BobState };
   panelIndex: number;
   dhView: DhView;
   // Progressive disclosure: the tamper/status experiments stay hidden until the
@@ -697,7 +714,7 @@ function renderExperimentGate(state: LabState, atLastPanel: boolean): string {
       <h2 id="exp-gate-heading">${ready ? "Now try breaking it" : "Break-it experiments — locked"}</h2>
       <p class="exp-gate-lead">${
         ready
-          ? "You've watched the handshake build a shared secret end to end. Unlock the live tamper controls to attack it — flip the signature, drop the one-time prekey, or corrupt a key on the wire, and watch the real crypto react."
+          ? "You've watched the handshake build a shared secret end to end. Unlock the live controls to tamper with a signature, replace a bundle, or corrupt a key, and watch the real crypto react."
           : "Walk the five panels first. The tamper controls unlock once you reach the final panel, so you break the handshake only after you've seen what it builds."
       }</p>
       <button type="button" id="unlock-experiments" class="exp-gate-btn" ${ready ? "" : "disabled"} aria-label="Unlock the break-it experiments">
@@ -719,7 +736,7 @@ function renderAppShell(data: DemoData, state: LabState): string {
         <div class="cl-hero-main">
           <h1 class="cl-hero-title">X3DH</h1>
           <p class="cl-hero-sub">Extended Triple Diffie-Hellman · X25519 + HKDF</p>
-          <p class="cl-hero-desc">Derives a shared secret from Bob's offline prekey bundle by combining four X25519 DH operations through HKDF, so you can watch Alice open an encrypted session before Bob ever comes online.</p>
+          <p class="cl-hero-desc">Derives a shared secret from an offline prekey bundle using three X25519 DH terms, plus a fourth when a one-time prekey is available. Check whose identity key the bundle belongs to before trusting the session.</p>
         </div>
         <aside class="cl-hero-why" role="note" aria-label="Why it matters">
           <span class="cl-hero-why-label">WHY IT MATTERS</span>
@@ -774,7 +791,7 @@ export async function renderDemo() {
 
   const state: LabState = {
     scenario: { ...DEFAULT_SCENARIO },
-    seed: { bob: createBobState(), alice: createAliceState() },
+    seed: { bob: createBobState(), alice: createAliceState(), attacker: createBobState() },
     panelIndex: 0,
     dhView: "alice",
     experimentsUnlocked: false
@@ -844,14 +861,22 @@ export async function renderDemo() {
     // Both the "who holds what" regenerate and the commutativity "new keys"
     // button reseed the same live crypto so every value on the page recomputes.
     if (el.closest("#lab-regenerate") || el.closest("#commute-regenerate")) {
-      state.seed = { bob: createBobState(), alice: createAliceState() };
+      state.seed = { bob: createBobState(), alice: createAliceState(), attacker: createBobState() };
       await rerender("none");
       return;
     }
     const labToggle = el.closest<HTMLButtonElement>(".lab-toggle");
     if (labToggle) {
       const key = labToggle.dataset.scenario as keyof Scenario;
-      state.scenario = { ...state.scenario, [key]: !state.scenario[key] };
+      const next = !state.scenario[key];
+      state.scenario = { ...state.scenario, [key]: next };
+      // Keep signature failure and whole-bundle replacement distinct lessons.
+      if (next && key === "substituteBundle") {
+        state.scenario.tamperSpkSignature = false;
+        state.scenario.substituteSpk = false;
+      } else if (next && (key === "tamperSpkSignature" || key === "substituteSpk")) {
+        state.scenario.substituteBundle = false;
+      }
       await rerender("none");
       return;
     }

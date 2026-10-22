@@ -11,6 +11,7 @@ import {
   deriveX3dhSharedSecret,
   encryptInitialMessage,
   equalBytes,
+  identityFingerprint,
   verifySpkSignature
 } from "./x3dh";
 
@@ -210,6 +211,34 @@ describe("buildDemoState (full end-to-end flow)", () => {
     expect(demo.aliceDh).toBeNull();
     expect(demo.initialMessage).toBeNull();
     expect(demo.decryptedByBob).toBeNull();
+  });
+
+  it("scenario: a complete attacker bundle passes its own signature but fails Bob's trusted identity pin", async () => {
+    const seed = { bob: createBobState(), alice: createAliceState(), attacker: createBobState() };
+    const honest = await buildDemoState(DEFAULT_SCENARIO, seed);
+    const substituted = await buildDemoState({ ...DEFAULT_SCENARIO, substituteBundle: true }, seed);
+    if (honest.status !== "processed" || substituted.status !== "processed") {
+      throw new Error("A valid signed prekey unexpectedly failed verification");
+    }
+
+    expect(honest.identityMatchesPin).toBe(true);
+    expect(equalBytes(honest.pinnedFingerprint, honest.offeredFingerprint)).toBe(true);
+    expect(honest.decryptedByBob).toBe(honest.firstPlaintext);
+
+    expect(substituted.signatureOk).toBe(true);
+    expect(verifySpkSignature(substituted.bundle)).toBe(true);
+    expect(equalBytes(substituted.bundle.ikBPub, seed.attacker.ikB.publicKey)).toBe(true);
+    expect(substituted.identityMatchesPin).toBe(false);
+    expect(equalBytes(substituted.pinnedFingerprint, substituted.offeredFingerprint)).toBe(false);
+    expect(substituted.matchingSecrets).toBe(false);
+    expect(substituted.decryptedByBob).toBeNull();
+    expect(substituted.attackerSk).not.toBeNull();
+    expect(equalBytes(substituted.aliceSk, substituted.attackerSk)).toBe(true);
+    expect(substituted.decryptedByAttacker).toBe(substituted.firstPlaintext);
+
+    const independentDigest = new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(seed.bob.ikB.publicKey).buffer));
+    expect(equalBytes(await identityFingerprint(seed.bob.ikB.publicKey), independentDigest)).toBe(true);
+    expect(equalBytes(seed.bob.bundle.ikBPub, seed.bob.ikB.publicKey)).toBe(true);
   });
 
   it("scenario: dropping the OPK still yields matching secrets (weaker forward secrecy, not broken)", async () => {

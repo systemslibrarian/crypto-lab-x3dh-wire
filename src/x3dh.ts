@@ -89,8 +89,8 @@ export function createBobState(): BobState {
   const opkB = generateX25519KeyPair();
 
   // Sig(IK_B, Encode(SPK_B)) — X3DH §3.2. The identity secret that performs
-  // DH2 is the same secret that signs, which is exactly what makes the
-  // signature an authentication of Bob rather than a self-referential loop.
+  // DH2 is the same secret that signs, binding the prekey to the identity key.
+  // Its owner must still be authenticated out of band to call it Bob's key.
   const spkSignature = xeddsaSign(ikB.privateKey, spkB.publicKey);
 
   return {
@@ -121,6 +121,11 @@ export function createBobState(): BobState {
  */
 export function verifySpkSignature(bundle: BobBundle): boolean {
   return xeddsaVerify(bundle.ikBPub, bundle.spkBPub, bundle.spkSignature);
+}
+
+/** A full SHA-256 fingerprint for this lab's raw X25519 identity key. */
+export async function identityFingerprint(publicKey: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", toArrayBuffer(publicKey)));
 }
 
 export function createAliceState(): AliceState {
@@ -209,13 +214,17 @@ export async function decryptInitialMessage(
  * `tamperSpkSignature` flips a byte and the XEdDSA verify genuinely fails;
  * `substituteSpk` swaps in an attacker's prekey signed by the attacker's own
  * identity key, and the verify against Bob's IK_B genuinely rejects it;
- * `dropOpk` genuinely omits DH4 from both derivations; `corruptEkA` genuinely
+ * `substituteBundle` presents a whole attacker-controlled, internally valid
+ * bundle; a trusted Bob identity pin detects it, while the unpinned teaching
+ * continuation shows that the attacker can decrypt. `dropOpk` omits DH4;
+ * `corruptEkA` genuinely
  * corrupts the public EK_A Alice sends so Bob's reconstructed key no longer
  * matches. Nothing here fakes an outcome — the visualization reads the truth.
  */
 export type Scenario = {
   tamperSpkSignature: boolean;
   substituteSpk: boolean;
+  substituteBundle: boolean;
   dropOpk: boolean;
   corruptEkA: boolean;
 };
@@ -223,20 +232,30 @@ export type Scenario = {
 export const DEFAULT_SCENARIO: Scenario = {
   tamperSpkSignature: false,
   substituteSpk: false,
+  substituteBundle: false,
   dropOpk: false,
   corruptEkA: false
 };
 
 export async function buildDemoState(
   scenario: Scenario = DEFAULT_SCENARIO,
-  seed?: { bob: BobState; alice: AliceState }
+  seed?: { bob: BobState; alice: AliceState; attacker?: BobState }
 ) {
   const bob = seed?.bob ?? createBobState();
   const alice = seed?.alice ?? createAliceState();
+  const attacker = seed?.attacker ?? createBobState();
+
+  // The independently known Bob key is a teaching fixture for an out-of-band
+  // trusted pin. Hash both complete raw keys; comparing full fingerprints is
+  // equivalent to comparing the keys, subject to SHA-256 collision resistance.
+  const pinnedFingerprint = await identityFingerprint(bob.ikB.publicKey);
+  const offered = scenario.substituteBundle ? attacker : bob;
+  const offeredFingerprint = await identityFingerprint(offered.bundle.ikBPub);
+  const identityMatchesPin = equalBytes(offered.bundle.ikBPub, bob.ikB.publicKey);
 
   // (b) Tamper the SPK signature: flip a byte on a COPY of the bundle so the
   // XEdDSA verification honestly fails, without corrupting the raw keypair.
-  const bundle: BobBundle = { ...bob.bundle, spkSignature: Uint8Array.from(bob.bundle.spkSignature) };
+  const bundle: BobBundle = { ...offered.bundle, spkSignature: Uint8Array.from(offered.bundle.spkSignature) };
   if (scenario.tamperSpkSignature) {
     bundle.spkSignature[0] ^= 0xff;
   }
@@ -246,8 +265,7 @@ export async function buildDemoState(
   // the attack the signed prekey exists to stop, and it is caught only because
   // the signature is checked against IK_B. Were the bundle to carry its own
   // signing public key, the attacker would simply publish theirs and pass.
-  const attacker = scenario.substituteSpk ? createBobState() : null;
-  if (attacker) {
+  if (scenario.substituteSpk) {
     bundle.spkBPub = attacker.spkB.publicKey;
     bundle.spkSignature = xeddsaSign(attacker.ikB.privateKey, attacker.spkB.publicKey);
   }
@@ -262,7 +280,9 @@ export async function buildDemoState(
     return {
       status: "aborted" as const,
       scenario, bob, alice, bundle, withOpk, signatureOk,
-      spkSubstituted: attacker !== null,
+      spkSubstituted: scenario.substituteSpk,
+      pinnedFingerprint, offeredFingerprint, identityMatchesPin,
+      attackerSk: null, decryptedByAttacker: null,
       aliceDh: null, bobDh: null, aliceSk: null, bobSk: null,
       matchingSecrets: null, initialMessage: null,
       firstPlaintext: null, decryptedByBob: null
@@ -279,9 +299,13 @@ export async function buildDemoState(
 
   const aliceDh = computeAliceDhSet(alice, bundle, withOpk);
   const bobDh = computeBobDhSet(bob, alice.ikA.publicKey, ekAPubOnWire, withOpk);
+  const attackerDh = scenario.substituteBundle
+    ? computeBobDhSet(attacker, alice.ikA.publicKey, ekAPubOnWire, withOpk)
+    : null;
 
   const aliceSk = await deriveX3dhSharedSecret(aliceDh);
   const bobSk = await deriveX3dhSharedSecret(bobDh);
+  const attackerSk = attackerDh ? await deriveX3dhSharedSecret(attackerDh) : null;
   const matchingSecrets = equalBytes(aliceSk, bobSk);
 
   const firstPlaintext = "Hi Bob, this first message is established with X3DH-derived SK.";
@@ -295,6 +319,14 @@ export async function buildDemoState(
     decryptedByBob = await decryptInitialMessage(bobSk, encrypted.iv, encrypted.ciphertext);
   } catch {
     decryptedByBob = null;
+  }
+  let decryptedByAttacker: string | null = null;
+  if (attackerSk) {
+    try {
+      decryptedByAttacker = await decryptInitialMessage(attackerSk, encrypted.iv, encrypted.ciphertext);
+    } catch {
+      decryptedByAttacker = null;
+    }
   }
 
   const initialMessage: InitialMessage = {
@@ -313,7 +345,9 @@ export async function buildDemoState(
     bundle,
     withOpk,
     signatureOk,
-    spkSubstituted: attacker !== null,
+    spkSubstituted: scenario.substituteSpk,
+    pinnedFingerprint, offeredFingerprint, identityMatchesPin,
+    attackerSk, decryptedByAttacker,
     aliceDh,
     bobDh,
     aliceSk,
