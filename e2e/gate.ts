@@ -672,7 +672,7 @@ export async function boot(page: Page, theme: 'dark' | 'light'): Promise<void> {
   await expect(page.locator('.step-btn')).toHaveCount(5);
   await expect(page.locator('.step-btn').first()).toHaveAttribute('aria-current', 'step');
   await expect(page.locator('#panel-host h2')).toContainText('Panel 1');
-  await expect(page.locator('#panel-host .verdict--ok')).toHaveText('valid');
+  await expect(page.locator('#panel-host .verdict--ok').filter({ hasText: /^valid$/ })).toHaveText('valid');
   await expect(page.locator('#prev-panel')).toBeDisabled();
   await expect(page.locator('#next-panel')).toBeEnabled();
 
