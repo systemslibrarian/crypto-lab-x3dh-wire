@@ -227,7 +227,7 @@ function renderStatus(data: DemoData): string {
       ${pill(data.withOpk, "OPK present (DH4)", "OPK dropped (no DH4)")}
       ${pill(match, "Alice SK = Bob SK", "SK MISMATCH")}
       ${pill(decrypted, "Bob decrypted", "Decrypt FAILED")}
-      ${data.scenario.substituteBundle ? pill(data.decryptedByAttacker !== null, "Attacker decrypted", "Attacker decrypt failed") : ""}
+      ${data.scenario.substituteBundle ? pill(data.decryptedByAttacker === null, "Attacker could not decrypt", "Attacker decrypted") : ""}
     </div>
   `;
 }

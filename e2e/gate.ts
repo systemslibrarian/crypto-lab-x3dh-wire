@@ -853,9 +853,9 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
 
   await page.locator('#unlock-experiments').click();
   await expect(page.locator('#experiments')).toHaveCount(1);
-  await expect(page.locator('.status-pill')).toHaveCount(4);
-  await expect(page.locator('.status-pill.ok')).toHaveCount(4);
-  await scanAt('experiments unlocked — all four status pills green');
+  await expect(page.locator('.status-pill')).toHaveCount(5);
+  await expect(page.locator('.status-pill.ok')).toHaveCount(5);
+  await scanAt('experiments unlocked — all five status pills green');
 
   // ── Red path 1: tampered SPK signature ──────────────────────────────────
   await setToggle(page, 'tamperSpkSignature', true);
@@ -880,7 +880,21 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expectPill(page, 'Message not sent', 'bad');
   await scanAt('relay-substituted SPK — rejected against IK_B, the substitution wording');
   await setToggle(page, 'substituteSpk', false);
-  await expect(page.locator('#panel-host .verdict--ok')).toHaveText('valid');
+  await expect(page.locator('#panel-host .verdict--ok').filter({ hasText: /^valid$/ })).toHaveText('valid');
+
+  // A self-consistent attacker bundle verifies, but the trusted identity pin
+  // fails. Scan both the fingerprint view and the unpinned decryption result.
+  await setToggle(page, 'substituteBundle', true);
+  await expectPill(page, 'Signature valid', 'ok');
+  await expectPill(page, 'Trusted Bob key MISMATCH', 'bad');
+  await expect(page.locator('#panel-host')).toContainText('MISMATCH — abort if pin is enforced');
+  await scanAt('whole attacker bundle — valid signature but trusted identity mismatch');
+  await gotoPanel(page, 4, /Panel 5/);
+  await expectPill(page, 'Attacker decrypted', 'bad');
+  await expect(page.locator('#panel-host')).toContainText('Attacker decrypts (unpinned path)');
+  await scanAt('unpinned continuation — Bob fails and attacker decrypts');
+  await setToggle(page, 'substituteBundle', false);
+  await gotoPanel(page, 0, /Panel 1/);
 
   // ── Red path 3: one-time prekey dropped — SK still forms ────────────────
   await setToggle(page, 'dropOpk', true);
@@ -908,7 +922,7 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#panel-host .verdict--bad')).toContainText('authentication failed');
   await scanAt("EK_A corrupted — Bob's decrypt fails with a key mismatch");
   await setToggle(page, 'corruptEkA', false);
-  await expect(page.locator('.status-pill.ok')).toHaveCount(4);
+  await expect(page.locator('.status-pill.ok')).toHaveCount(5);
 
   // ── Regenerate really regenerates ───────────────────────────────────────
   const fullBefore = await page.locator('.hexchip').first().getAttribute('data-full');
@@ -916,7 +930,7 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect
     .poll(async () => page.locator('.hexchip').first().getAttribute('data-full'))
     .not.toBe(fullBefore);
-  await expect(page.locator('.status-pill.ok')).toHaveCount(4);
+  await expect(page.locator('.status-pill.ok')).toHaveCount(5);
 
   // ── Hover, which persists after a click ─────────────────────────────────
   await page.locator('.step-btn').nth(1).hover();
