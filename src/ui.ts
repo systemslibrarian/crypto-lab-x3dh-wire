@@ -256,7 +256,7 @@ function renderPanel1(data: DemoData): string {
       </div>
       <p class="small-note">
         SPK_B is signed with the offered bundle's <em>identity</em> secret using ${term("XEdDSA", "xeddsa")}, exactly as
-        <a href="https://signal.org/docs/specifications/x3dh/#keys" target="_blank" rel="noreferrer">X3DH §2.1</a> specifies
+        <a href="https://signal.org/docs/specifications/x3dh/#publishing-keys" target="_blank" rel="noreferrer">X3DH §3.2</a> specifies
         (<code class="inline-code">Sig(IK_B, Encode(SPK_B))</code>). XEdDSA lets one X25519 key both do Diffie-Hellman
         and sign, so the verifier re-derives the signing public key from <code class="inline-code">IK_B</code> by the
         birational map <code class="inline-code">y = (u − 1)/(u + 1)</code> — the bundle publishes no separate signing key.
